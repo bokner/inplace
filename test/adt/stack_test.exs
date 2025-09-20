@@ -1,7 +1,7 @@
-defmodule BitGraph.StackTest do
+defmodule InPlace.StackTest do
   use ExUnit.Case
 
-  alias BitGraph.Stack
+  alias InPlace.Stack
 
   describe "Stack" do
     test "operations" do

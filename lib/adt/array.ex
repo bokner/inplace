@@ -1,4 +1,4 @@
-defmodule BitGraph.Array do
+defmodule InPlace.Array do
   def new(size) do
     :atomics.new(size, signed: :true)
   end

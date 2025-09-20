@@ -1,7 +1,7 @@
-defmodule BitGraph.QueueTest do
+defmodule InPlace.QueueTest do
   use ExUnit.Case
 
-  alias BitGraph.Queue
+  alias InPlace.Queue
 
   describe "Circular queue" do
     test "operations" do

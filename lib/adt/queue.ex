@@ -1,5 +1,5 @@
-defmodule BitGraph.Queue do
-  alias BitGraph.Array
+defmodule InPlace.Queue do
+  alias InPlace.Array
 
   ## Circular queue
   ## The internal structure:
