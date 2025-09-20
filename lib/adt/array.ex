@@ -4,11 +4,11 @@ defmodule InPlace.Array do
   end
 
   ## Get element by (1-based) index
-  def get(array, idx) do
+  def get(array, idx) when is_integer(idx) do
     :atomics.get(array, idx)
   end
 
-  def put(array, idx, value) when is_integer(value) do
+  def put(array, idx, value) when is_integer(idx) and is_integer(value) do
     :atomics.put(array, idx, value)
   end
 

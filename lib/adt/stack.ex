@@ -25,7 +25,7 @@ defmodule InPlace.Stack do
     |> tap(fn top -> is_nil(top) || :atomics.sub(stack, 1, 1) end)
   end
 
-  def push(stack, value) do
+  def push(stack, value) when is_integer(value) do
     if size(stack) == Array.size(stack) - 1 do
        throw({:error, :stackoverflow})
     else
