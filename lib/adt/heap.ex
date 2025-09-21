@@ -6,9 +6,6 @@ defmodule InPlace.Heap do
   - The capacity of the heap has to be specified at the time of creation.
   """
   alias InPlace.Array
-  import Bitwise
-
-  @null (1 <<< 64) - 1
 
   @doc """
   Initialize. All values are initially null.
@@ -18,13 +15,22 @@ defmodule InPlace.Heap do
   def new(capacity, opts \\ []) do
     Array.new(capacity + 1)
     |> then(fn ref ->
-      Enum.each(1..capacity, fn idx -> Array.put(ref, idx, @null) end)
+      Array.put(ref, capacity + 1 , 0)
       %{capacity: capacity, array: ref, opts: Keyword.merge(default_opts(), opts)}
     end)
+
   end
 
   defp default_opts() do
-    [comparator: &Kernel.</2]
+    [comparator: &Kernel.<=/2]
+  end
+
+  def size(%{capacity: capacity, array: array} = _heap) do
+    Array.get(array, size_address(capacity))
+  end
+
+  def inc_size(%{capacity: capacity, array: array} = _heap, delta \\ 1) do
+    Array.update(array, size_address(capacity), fn size -> size + delta end)
   end
 
   def get_min(heap) do
@@ -35,19 +41,25 @@ defmodule InPlace.Heap do
 
   end
 
-  def insert(heap, key) when is_integer(key) do
-
+  def insert(%{array: array} = heap, key) when is_integer(key) do
+    if size(heap) == 0 do
+      Array.put(array, 1, key)
+    else
+      
+    end
+    inc_size(heap, 1)
   end
 
   def decrease_key(heap, key, delta) when is_integer(key) and is_integer(delta) do
 
   end
 
+  def size_address(capacity) do
+    capacity + 1
+  end
+
   defp at(%{array: array} = _heap, position) when is_integer(position) do
-    case Array.get(array, position) do
-      @null -> nil
-      val -> val
-    end
+    Array.get(array, position)
   end
 
   defp get_children(heap, parent_position) do

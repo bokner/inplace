@@ -2,7 +2,7 @@ defmodule InPlace.Stack do
   alias InPlace.Array
 
   def new(max_capacity) when is_integer(max_capacity) and max_capacity > 0 do
-    Array.new(max_capacity + 1)
+    Array.new(max_capacity + 1, 0)
   end
 
   def size(stack) do

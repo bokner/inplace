@@ -8,7 +8,7 @@ defmodule InPlace.Queue do
   ## , that is: arr[arr[capacity + 2] + 1] = front
   ##
   def new(capacity) when is_integer(capacity) and capacity > 0 do
-    ref = Array.new(capacity + 2)
+    ref = Array.new(capacity + 2, 0)
     {capacity, ref}
   end
 
