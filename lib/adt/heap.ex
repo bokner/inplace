@@ -59,8 +59,8 @@ defmodule InPlace.Heap do
     if capacity == current_size, do: throw(:heap_over_capacity)
     new_size = current_size + 1
     Array.put(array, new_size, key)
-    sift_up(heap, new_size)
     inc_size(heap, 1)
+    sift_up(heap, new_size)
   end
 
   def decrease_key(heap, key, delta) when is_integer(key) and is_integer(delta) do
@@ -71,8 +71,9 @@ defmodule InPlace.Heap do
     capacity + 1
   end
 
-  defp at(%{array: array} = _heap, position) when is_integer(position) do
-    Array.get(array, position)
+  def at(%{array: array} = heap, position, heap_size \\ nil) when is_integer(position) do
+    size = heap_size || size(heap)
+    if position <= size, do: Array.get(array, position)
   end
 
   defp get_left_child(heap, parent_position) do
@@ -99,25 +100,67 @@ defmodule InPlace.Heap do
     div(child_position, 2)
   end
 
-  defp sift_up(%{comparator: compare_fun, array: array} = heap, 1) do
+  defp valid_position?(heap, position, heap_size \\ nil) do
+    size = heap_size || size(heap)
+    size >= position
+  end
+
+  def sift_up(heap, position, key \\ nil)
+  def sift_up(_heap, 1, _) do
     :ok
   end
 
-  defp sift_up(%{comparator: compare_fun, array: array} = heap, position, key \\ nil) do
+  def sift_up(%{comparator: compare_fun} = heap, position, key) do
     parent = parent_position(position)
     p_key = at(heap, parent)
     c_key = key || at(heap, position)
     if compare_fun.(p_key, c_key) do
       :ok
     else
-      Array.put(array, parent, c_key)
-      Array.put(array, position, p_key)
-      sift_up(heap, parent)
+      swap_elements(heap, {parent, p_key}, {position, c_key})
+      sift_up(heap, parent, c_key)
     end
   end
 
-  defp sift_down(%{comparator: compare_fun, array: array} = heap, position, key \\ nil) do
-    :TODO
+  defp swap_elements(%{array: array} = _heap, {position1, key1}, {position2, key2}) do
+    Array.put(array, position1, key2)
+    Array.put(array, position2, key1)
+  end
+
+  defp sift_down(heap, position, key \\ nil) do
+    sift_down(heap, position, key, size(heap))
+  end
+
+  defp sift_down(_heap, position, _key, size) when position == size do
+    :ok
+  end
+
+  defp sift_down(%{comparator: compare_fun} = heap, position, key, size) do
+    left_p = left_child_position(position)
+    right_p = right_child_position(position)
+    if left_p do
+      parent_key = key || at(heap, position)
+      ## Swap with smallest of child keys, if it's bigger than parent key
+      left_key = at(heap, left_p)
+      right_key = at(heap, right_p)
+      if compare_fun.(left_key, right_key) do
+          ## maybe swap left key and parent key
+          if compare_fun.(left_key, parent_key) do
+            swap_elements(heap, {position, parent_key}, {left_p, left_key})
+            sift_down(heap, left_p, parent_key)
+          end
+        else
+          ## maybe swap right key and parent key
+          if compare_fun.(right_key, parent_key) do
+            swap_elements(heap, {position, parent_key}, {right_p, right_key})
+            sift_down(heap, right_p, parent_key)
+          end
+      end
+    else
+      ## Left child is absent -  this is not a complete tree
+      throw(:not_complete_tree)
+    end
+
   end
 
 end
