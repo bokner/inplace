@@ -1,0 +1,5 @@
+%{
+  "erlang_term": {:hex, :erlang_term, "2.0.7", "8fc08465432667e1c8d00b75dafa42e97b053c2c44aaa140ac0915c160d78bd7", [:rebar3], [], "hexpm", "29b2b5cd47df681e42f0f11ad4680f2bb7db2f7b871b074dcf3fba75219be9f9"},
+  "redbug_clone": {:hex, :redbug_clone, "2.0.10", "786c766accaa660089760025faf06a6acb4e3517f2c6fc9a34d698fe38217c64", [:rebar3], [], "hexpm", "7ad11db975aa5547b81101a6628bb9defb46e7f274861fbd37fd8d85dc03f6ee"},
+  "replbug": {:hex, :replbug, "1.0.2", "5dae87d9839d9821ad5452a7c29f39259c92f7d561f3e5f8dfff930528ece47f", [:mix], [{:erlang_term, "~> 2.0", [hex: :erlang_term, repo: "hexpm", optional: false]}, {:redbug_clone, "~> 2.0.10", [hex: :redbug_clone, repo: "hexpm", optional: false]}], "hexpm", "8e0d8066f2cd776f3efdd51918152ab54c4bbf1f975d6e8d25ff3db0de5ed2e6"},
+}
