@@ -14,14 +14,12 @@ defmodule InPlace.Heap do
   """
   def new(capacity, opts \\ []) do
     opts = Keyword.merge(default_opts(), opts)
+
     Array.new(capacity + 1)
     |> then(fn ref ->
-      Array.put(ref, capacity + 1 , 0)
-      %{capacity: capacity, array: ref, opts: opts,
-        comparator: Keyword.get(opts, :comparator)
-      }
+      Array.put(ref, capacity + 1, 0)
+      %{capacity: capacity, array: ref, opts: opts, comparator: Keyword.get(opts, :comparator)}
     end)
-
   end
 
   defp default_opts() do
@@ -45,13 +43,19 @@ defmodule InPlace.Heap do
   end
 
   def extract_min(%{array: array} = heap) do
+    current_min = get_min(heap)
+
     case size(heap) do
-      0 -> nil
+      0 ->
+        :ok
+
       current_size ->
         Array.swap(array, 1, current_size)
         inc_size(heap, -1)
         sift_down(heap, 1)
     end
+
+    current_min
   end
 
   def insert(%{capacity: capacity, array: array} = heap, key) when is_integer(key) do
@@ -63,8 +67,10 @@ defmodule InPlace.Heap do
     sift_up(heap, new_size)
   end
 
-  def decrease_key(heap, key, delta) when is_integer(key) and is_integer(delta) do
-
+  def decrease_key(%{array: array} = heap, position, delta)
+      when is_integer(position) and is_integer(delta) and delta >= 0 do
+    Array.update(array, position, fn key -> key - delta end)
+    sift_up(heap, position)
   end
 
   def size_address(capacity) do
@@ -102,10 +108,11 @@ defmodule InPlace.Heap do
 
   defp valid_position?(heap, position, heap_size \\ nil) do
     size = heap_size || size(heap)
-    size >= position
+    position <= size
   end
 
   def sift_up(heap, position, key \\ nil)
+
   def sift_up(_heap, 1, _) do
     :ok
   end
@@ -114,6 +121,7 @@ defmodule InPlace.Heap do
     parent = parent_position(position)
     p_key = at(heap, parent)
     c_key = key || at(heap, position)
+
     if compare_fun.(p_key, c_key) do
       :ok
     else
@@ -127,40 +135,51 @@ defmodule InPlace.Heap do
     Array.put(array, position2, key1)
   end
 
-  defp sift_down(heap, position, key \\ nil) do
-    sift_down(heap, position, key, size(heap))
+  def sift_down(heap, position) do
+    sift_down(heap, position, at(heap, position), size(heap))
   end
 
-  defp sift_down(_heap, position, _key, size) when position == size do
+  def sift_down(_heap, position, _key, size) when position >= size do
     :ok
   end
 
-  defp sift_down(%{comparator: compare_fun} = heap, position, key, size) do
+  def sift_down(%{comparator: compare_fun} = heap, position, key, size) do
     left_p = left_child_position(position)
     right_p = right_child_position(position)
-    if left_p do
-      parent_key = key || at(heap, position)
-      ## Swap with smallest of child keys, if it's bigger than parent key
+    parent_key = key || at(heap, position)
+
+    if valid_position?(heap, left_p, size) do
       left_key = at(heap, left_p)
       right_key = at(heap, right_p)
-      if compare_fun.(left_key, right_key) do
-          ## maybe swap left key and parent key
-          if compare_fun.(left_key, parent_key) do
-            swap_elements(heap, {position, parent_key}, {left_p, left_key})
-            sift_down(heap, left_p, parent_key)
+
+      swap_with =
+        if compare_fun.(parent_key, left_key) do
+          ## Rule out left child
+          if valid_position?(heap, right_p, size) do
+            if !compare_fun.(parent_key, right_key) do
+              ## Right child to swap
+              {right_p, right_key}
+            else
+              ## No children to swap
+              false
+            end
           end
         else
-          ## maybe swap right key and parent key
-          if compare_fun.(right_key, parent_key) do
-            swap_elements(heap, {position, parent_key}, {right_p, right_key})
-            sift_down(heap, right_p, parent_key)
+          ## Could be either child
+          ## We know left child is `leq` than parent
+          if compare_fun.(right_key, left_key) do
+            ## Right child `leq` than left child
+            {right_p, right_key}
+          else
+            {left_p, left_key}
           end
-      end
+        end
+
+      ## maybe swap
+      swap_with && swap_elements(heap, {position, parent_key}, swap_with)
     else
-      ## Left child is absent -  this is not a complete tree
+      #   ## Left child is absent -  this is not a complete tree
       throw(:not_complete_tree)
     end
-
   end
-
 end
