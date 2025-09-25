@@ -57,14 +57,16 @@ defmodule InPlace.Queue do
   end
 
   def dequeue({capacity, ref} = queue) do
-      case size(queue) do
-        0 -> nil
-        current_size ->
-          pointer = front_pointer(queue)
-          Array.put(ref, size_address(capacity), current_size - 1)
-          Array.put(ref, front_address(capacity), rem(pointer + 1, capacity))
-          get0(ref, pointer)
-        end
+    case size(queue) do
+      0 ->
+        nil
+
+      current_size ->
+        pointer = front_pointer(queue)
+        Array.put(ref, size_address(capacity), current_size - 1)
+        Array.put(ref, front_address(capacity), rem(pointer + 1, capacity))
+        get0(ref, pointer)
+    end
   end
 
   def from_list(list) do
