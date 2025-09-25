@@ -34,6 +34,44 @@ defmodule InPlace.Heap do
     size(heap) == 0
   end
 
+  def valid?(%{comparator: compare_fun} = heap) do
+    case size(heap) do
+      0 ->
+        true
+
+      heap_size ->
+        Enum.reduce_while(1..div(heap_size, 2), true, fn idx, _acc ->
+          p_key = at(heap, idx)
+          l_key = get_left_child(heap, idx)
+
+          if !l_key do
+            {:halt, true}
+          else
+            if compare_fun.(p_key, l_key) do
+              ## heap property for left child satisfied
+              r_key = get_right_child(heap, idx)
+
+              if !r_key do
+                ## end of the tree
+                {:halt, true}
+              else
+                if compare_fun.(p_key, r_key) do
+                  ## heap property for right child satisfied
+                  {:cont, true}
+                else
+                  ## Right child violates heap property
+                  {:halt, false}
+                end
+              end
+            else
+              ## Left child violates heap property
+              {:halt, false}
+            end
+          end
+        end)
+    end
+  end
+
   def inc_size(%{capacity: capacity, array: array} = _heap, delta \\ 1) do
     Array.update(array, size_address(capacity), fn size -> size + delta end)
   end
@@ -82,11 +120,11 @@ defmodule InPlace.Heap do
     if position <= size, do: Array.get(array, position)
   end
 
-  defp get_left_child(heap, parent_position) do
+  def get_left_child(heap, parent_position) do
     at(heap, left_child_position(parent_position))
   end
 
-  defp get_right_child(heap, parent_position) do
+  def get_right_child(heap, parent_position) do
     at(heap, right_child_position(parent_position))
   end
 
@@ -145,10 +183,11 @@ defmodule InPlace.Heap do
 
   def sift_down(%{comparator: compare_fun} = heap, position, key, size) do
     left_p = left_child_position(position)
-    right_p = right_child_position(position)
-    parent_key = key || at(heap, position)
 
     if valid_position?(heap, left_p, size) do
+      right_p = right_child_position(position)
+      parent_key = key || at(heap, position)
+
       left_key = at(heap, left_p)
       right_key = at(heap, right_p)
 
@@ -176,10 +215,10 @@ defmodule InPlace.Heap do
         end
 
       ## maybe swap
-      swap_with && swap_elements(heap, {position, parent_key}, swap_with)
-    else
-      #   ## Left child is absent -  this is not a complete tree
-      throw(:not_complete_tree)
+      if swap_with do
+        swap_elements(heap, {position, parent_key}, swap_with)
+        sift_down(heap, elem(swap_with, 0), parent_key, size)
+      end
     end
   end
 end
