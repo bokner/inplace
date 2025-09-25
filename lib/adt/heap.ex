@@ -111,20 +111,20 @@ defmodule InPlace.Heap do
     sift_up(heap, position)
   end
 
-  def size_address(capacity) do
+  defp size_address(capacity) do
     capacity + 1
   end
 
-  def at(%{array: array} = heap, position, heap_size \\ nil) when is_integer(position) do
+  defp at(%{array: array} = heap, position, heap_size \\ nil) when is_integer(position) do
     size = heap_size || size(heap)
     if position <= size, do: Array.get(array, position)
   end
 
-  def get_left_child(heap, parent_position) do
+  defp get_left_child(heap, parent_position) do
     at(heap, left_child_position(parent_position))
   end
 
-  def get_right_child(heap, parent_position) do
+  defp get_right_child(heap, parent_position) do
     at(heap, right_child_position(parent_position))
   end
 
@@ -149,13 +149,13 @@ defmodule InPlace.Heap do
     position <= size
   end
 
-  def sift_up(heap, position, key \\ nil)
+  defp sift_up(heap, position, key \\ nil)
 
-  def sift_up(_heap, 1, _) do
+  defp sift_up(_heap, 1, _) do
     :ok
   end
 
-  def sift_up(%{comparator: compare_fun} = heap, position, key) do
+  defp sift_up(%{comparator: compare_fun} = heap, position, key) do
     parent = parent_position(position)
     p_key = at(heap, parent)
     c_key = key || at(heap, position)
@@ -173,18 +173,19 @@ defmodule InPlace.Heap do
     Array.put(array, position2, key1)
   end
 
-  def sift_down(heap, position) do
+  defp sift_down(heap, position) do
     sift_down(heap, position, at(heap, position), size(heap))
   end
 
-  def sift_down(_heap, position, _key, size) when position >= size do
+  defp sift_down(_heap, position, _key, size) when position >= size do
     :ok
   end
 
-  def sift_down(%{comparator: compare_fun} = heap, position, key, size) do
-    left_p = left_child_position(position)
-
-    if valid_position?(heap, left_p, size) do
+  defp sift_down(%{comparator: compare_fun} = heap, position, key, size) do
+    if position > div(size, 2) do
+      :ok
+    else
+      left_p = left_child_position(position)
       right_p = right_child_position(position)
       parent_key = key || at(heap, position)
 
