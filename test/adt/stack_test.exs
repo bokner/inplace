@@ -13,14 +13,17 @@ defmodule InPlace.StackTest do
 
       ## Push
       nums = Enum.shuffle(1..100)
-      Enum.each(Enum.with_index(nums, 1),
+
+      Enum.each(
+        Enum.with_index(nums, 1),
         fn {num, idx} ->
           Stack.push(stack, num)
           assert Stack.peek(stack) == num
           refute Stack.empty?(stack)
           assert num == Stack.peek(stack)
           assert idx == Stack.size(stack)
-      end)
+        end
+      )
 
       ## Stack overflow (we are now at capacity, 100 elements in the stack)
       assert catch_throw({:error, :stackoverflow} = Stack.push(stack, 101))

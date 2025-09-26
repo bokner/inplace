@@ -14,14 +14,16 @@ defmodule InPlace.QueueTest do
       range = -50..49
       range_size = Range.size(range)
       ## Enqueue
-      Enum.each(Enum.with_index(range, 1),
+      Enum.each(
+        Enum.with_index(range, 1),
         fn {num, idx} ->
           Queue.enqueue(queue, num)
           assert Queue.rear(queue) == num
           refute Queue.empty?(queue)
           assert Queue.front(queue) == -50
           assert idx == Queue.size(queue)
-      end)
+        end
+      )
 
       ## Capacity overflow (we are now at capacity, 100 elements in the queue)
       assert catch_throw({:error, :stackoverflow} = Queue.enqueue(queue, Enum.random(1..1000)))

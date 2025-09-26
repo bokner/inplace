@@ -40,7 +40,7 @@ defmodule InPlace.Heap do
         true
 
       heap_size ->
-        Enum.reduce_while(1..div(heap_size, 2), true, fn idx, _acc ->
+        Enum.reduce_while(1..parent_position(heap_size), true, fn idx, _acc ->
           p_key = at(heap, idx)
           l_key = get_left_child(heap, idx)
 
@@ -72,12 +72,12 @@ defmodule InPlace.Heap do
     end
   end
 
-  def inc_size(%{capacity: capacity, array: array} = _heap, delta \\ 1) do
-    Array.update(array, size_address(capacity), fn size -> size + delta end)
-  end
-
   def get_min(heap) do
     at(heap, 1)
+  end
+
+  def get_max(heap) do
+    at(heap, size(heap))
   end
 
   def extract_min(%{array: array} = heap) do
@@ -101,7 +101,7 @@ defmodule InPlace.Heap do
     if capacity == current_size, do: throw(:heap_over_capacity)
     new_size = current_size + 1
     Array.put(array, new_size, key)
-    inc_size(heap, 1)
+    inc_size(heap)
     sift_up(heap, new_size)
   end
 
@@ -111,8 +111,20 @@ defmodule InPlace.Heap do
     sift_up(heap, position)
   end
 
+  ## enforce heap property on the array
+  def heapify(heap) do
+    starting_position = parent_position(size(heap))
+    Enum.each(starting_position..1//-1, fn pos ->
+      sift_down(heap, pos)
+    end)
+  end
+
   defp size_address(capacity) do
     capacity + 1
+  end
+
+  defp inc_size(%{capacity: capacity, array: array} = _heap, delta \\ 1) do
+    Array.update(array, size_address(capacity), fn size -> size + delta end)
   end
 
   defp at(%{array: array} = heap, position, heap_size \\ nil) when is_integer(position) do
@@ -136,15 +148,11 @@ defmodule InPlace.Heap do
     2 * parent_position + 1
   end
 
-  defp get_parent(heap, child_position) when is_integer(child_position) do
-    at(heap, parent_position(child_position))
-  end
-
   defp parent_position(child_position) when is_integer(child_position) do
     div(child_position, 2)
   end
 
-  defp valid_position?(heap, position, heap_size \\ nil) do
+  defp valid_position?(heap, position, heap_size) do
     size = heap_size || size(heap)
     position <= size
   end
@@ -182,7 +190,7 @@ defmodule InPlace.Heap do
   end
 
   defp sift_down(%{comparator: compare_fun} = heap, position, key, size) do
-    if position > div(size, 2) do
+    if position > parent_position(size) do
       :ok
     else
       left_p = left_child_position(position)
