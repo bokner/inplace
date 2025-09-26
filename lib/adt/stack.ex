@@ -27,7 +27,7 @@ defmodule InPlace.Stack do
 
   def push(stack, value) when is_integer(value) do
     if size(stack) == Array.size(stack) - 1 do
-       throw({:error, :stackoverflow})
+      throw({:error, :stackoverflow})
     else
       new_size = :atomics.add_get(stack, 1, 1)
       Array.put(stack, new_size + 1, value)

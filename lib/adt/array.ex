@@ -3,10 +3,10 @@ defmodule InPlace.Array do
   @null (1 <<< 63) - 1
 
   def new(size, initial_value \\ @null) do
-    :atomics.new(size, signed: :true)
+    :atomics.new(size, signed: true)
     |> tap(fn ref ->
       initial_value != 0 &&
-      Enum.each(1..size, fn idx -> put(ref, idx, initial_value) end)
+        Enum.each(1..size, fn idx -> put(ref, idx, initial_value) end)
     end)
   end
 
@@ -28,10 +28,11 @@ defmodule InPlace.Array do
 
   def update_loop(array, idx, current, update_fun) do
     case :atomics.compare_exchange(array, idx, current, update_fun.(current)) do
-       :ok ->
-           :ok
-       altered ->
-           update_loop(array, idx, altered, update_fun)
+      :ok ->
+        :ok
+
+      altered ->
+        update_loop(array, idx, altered, update_fun)
     end
   end
 
@@ -46,7 +47,8 @@ defmodule InPlace.Array do
     Enum.map(1..size(array), fn idx -> :atomics.get(array, idx) end)
   end
 
-  def reduce(array, initial_value, reducer \\ fn el, acc -> [el | acc] end) when is_function(reducer) do
+  def reduce(array, initial_value, reducer \\ fn el, acc -> [el | acc] end)
+      when is_function(reducer) do
     Enum.reduce(1..size(array), initial_value, fn idx, acc ->
       reducer.(:atomics.get(array, idx), acc)
     end)
