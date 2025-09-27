@@ -22,6 +22,10 @@ defmodule InPlace.Array do
     :atomics.put(array, idx, value)
   end
 
+  def delete(array, idx) do
+    put(array, idx, @null)
+  end
+
   def update(array, idx, update_fun) do
     update_loop(array, idx, get(array, idx), update_fun)
   end
