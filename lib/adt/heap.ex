@@ -9,7 +9,7 @@ defmodule InPlace.Heap do
 
   @doc """
   Initialize. All values are initially null.
-  The element at capacity+1 is used to track the size.
+  The element at capacity+1 is used to track the heap size.
   `opts` - TBD
   """
   def new(capacity, opts \\ []) do
@@ -18,12 +18,22 @@ defmodule InPlace.Heap do
     Array.new(capacity + 1)
     |> then(fn ref ->
       Array.put(ref, capacity + 1, 0)
-      %{capacity: capacity, array: ref, opts: opts, comparator: Keyword.get(opts, :comparator)}
+
+      %{
+        capacity: capacity,
+        array: ref,
+        opts: opts,
+        comparator: Keyword.get(opts, :comparator),
+        getter: Keyword.get(opts, :getter)
+      }
     end)
   end
 
-  defp default_opts() do
-    [comparator: &Kernel.<=/2]
+  def default_opts() do
+    [
+      comparator: &Kernel.<=/2,
+      getter: fn key -> key end
+    ]
   end
 
   def size(%{capacity: capacity, array: array} = _heap) do
@@ -41,15 +51,12 @@ defmodule InPlace.Heap do
 
       heap_size ->
         Enum.reduce_while(1..parent_position(heap_size), true, fn idx, _acc ->
-          p_key = at(heap, idx)
-          l_key = get_left_child(heap, idx)
+          p_key = get_key(heap, idx)
+          l_key = get_left_child_key(heap, idx)
 
-          if !l_key do
-            {:halt, true}
-          else
             if compare_fun.(p_key, l_key) do
-              ## heap property for left child satisfied
-              r_key = get_right_child(heap, idx)
+              ## heap property for left child is satisfied
+              r_key = get_right_child_key(heap, idx)
 
               if !r_key do
                 ## end of the tree
@@ -67,17 +74,16 @@ defmodule InPlace.Heap do
               ## Left child violates heap property
               {:halt, false}
             end
-          end
         end)
     end
   end
 
-  def get_min(heap) do
-    at(heap, 1)
+  def get_min(%{getter: getter_fun} = heap) do
+    getter_fun.(get_key(heap, 1))
   end
 
-  def get_max(heap) do
-    at(heap, size(heap))
+  def get_max(%{getter: getter_fun} = heap) do
+    getter_fun.(get_key(heap, size(heap)))
   end
 
   def extract_min(%{array: array} = heap) do
@@ -114,6 +120,7 @@ defmodule InPlace.Heap do
   ## enforce heap property on the array
   def heapify(heap) do
     starting_position = parent_position(size(heap))
+
     Enum.each(starting_position..1//-1, fn pos ->
       sift_down(heap, pos)
     end)
@@ -127,17 +134,18 @@ defmodule InPlace.Heap do
     Array.update(array, size_address(capacity), fn size -> size + delta end)
   end
 
-  defp at(%{array: array} = heap, position, heap_size \\ nil) when is_integer(position) do
+  ## Get the key (pointer to data) given the position in the heap.
+  def get_key(%{array: array} = heap, position, heap_size \\ nil) when is_integer(position) do
     size = heap_size || size(heap)
     if position <= size, do: Array.get(array, position)
   end
 
-  defp get_left_child(heap, parent_position) do
-    at(heap, left_child_position(parent_position))
+  defp get_left_child_key(heap, parent_position) do
+    get_key(heap, left_child_position(parent_position))
   end
 
-  defp get_right_child(heap, parent_position) do
-    at(heap, right_child_position(parent_position))
+  defp get_right_child_key(heap, parent_position) do
+    get_key(heap, right_child_position(parent_position))
   end
 
   defp left_child_position(parent_position) do
@@ -165,8 +173,8 @@ defmodule InPlace.Heap do
 
   defp sift_up(%{comparator: compare_fun} = heap, position, key) do
     parent = parent_position(position)
-    p_key = at(heap, parent)
-    c_key = key || at(heap, position)
+    p_key = get_key(heap, parent)
+    c_key = key || get_key(heap, position)
 
     if compare_fun.(p_key, c_key) do
       :ok
@@ -182,52 +190,49 @@ defmodule InPlace.Heap do
   end
 
   defp sift_down(heap, position) do
-    sift_down(heap, position, at(heap, position), size(heap))
+    sift_down(heap, position, get_key(heap, position), size(heap))
   end
 
-  defp sift_down(_heap, position, _key, size) when position >= size do
-    :ok
-  end
 
   defp sift_down(%{comparator: compare_fun} = heap, position, key, size) do
-    if position > parent_position(size) do
-      :ok
-    else
-      left_p = left_child_position(position)
-      right_p = right_child_position(position)
-      parent_key = key || at(heap, position)
+    cond do
+      position > div(size, 2) ->
+        :ok
 
-      left_key = at(heap, left_p)
-      right_key = at(heap, right_p)
+      true ->
+        left_p = left_child_position(position)
+        right_p = right_child_position(position)
+        parent_key = key || get_key(heap, position)
 
-      swap_with =
-        if compare_fun.(parent_key, left_key) do
-          ## Rule out left child
-          if valid_position?(heap, right_p, size) do
-            if !compare_fun.(parent_key, right_key) do
-              ## Right child to swap
+        left_key = get_key(heap, left_p)
+        right_key = valid_position?(heap, right_p, size) && get_key(heap, right_p)
+
+        swap_with =
+          if compare_fun.(parent_key, left_key)  do
+            ## Rule out right child
+            if right_key && !compare_fun.(parent_key, right_key) do
+                ## Right child to swap
+                {right_p, right_key}
+            end
+          else
+            ## Could be either child
+            ## We know left child is `leq` than parent
+            if right_key && compare_fun.(right_key, left_key)  do
+              ## Right child `leq` than left child
               {right_p, right_key}
             else
-              ## No children to swap
-              false
+              {left_p, left_key}
             end
           end
-        else
-          ## Could be either child
-          ## We know left child is `leq` than parent
-          if compare_fun.(right_key, left_key) do
-            ## Right child `leq` than left child
-            {right_p, right_key}
-          else
-            {left_p, left_key}
-          end
-        end
 
-      ## maybe swap
-      if swap_with do
-        swap_elements(heap, {position, parent_key}, swap_with)
-        sift_down(heap, elem(swap_with, 0), parent_key, size)
-      end
+        ## maybe swap
+        if swap_with do
+          ## We don't use Array.swap/3 to save on retrieving values which are already known
+          swap_elements(heap, {position, parent_key}, swap_with)
+          sift_down(heap, elem(swap_with, 0), parent_key, size)
+        else
+          :ok
+        end
     end
   end
 end
