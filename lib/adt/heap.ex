@@ -10,7 +10,12 @@ defmodule InPlace.Heap do
   @doc """
   Initialize. All values are initially null.
   The element at capacity+1 is used to track the heap size.
-  `opts` - TBD
+  Options:
+  - `comparator` - function of arity 2, returns true if 1st argument strictly 'lesser' than 2nd.
+  `lesser` is understood as the ordering function. Arguments could be of any type.
+   Default: &Kernel.</2
+  - `getter` - function of arity 1; takes an integer (key) as argument and returns value of type integer()
+   Default:
   """
   def new(capacity, opts \\ []) do
     opts = Keyword.merge(default_opts(), opts)
@@ -22,7 +27,6 @@ defmodule InPlace.Heap do
       %{
         capacity: capacity,
         array: ref,
-        opts: opts,
         comparator: Keyword.get(opts, :comparator),
         getter: Keyword.get(opts, :getter)
       }
@@ -31,7 +35,7 @@ defmodule InPlace.Heap do
 
   def default_opts() do
     [
-      comparator: &Kernel.<=/2,
+      comparator: &Kernel.</2,
       getter: fn key -> key end
     ]
   end
