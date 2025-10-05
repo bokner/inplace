@@ -28,17 +28,16 @@ defmodule InPlace.HeapTest do
       Enum.each(values, fn val -> Heap.insert(heap, val) end)
       assert Heap.extract_min(heap) == Enum.min(values)
       assert Heap.size(heap) == 49
-      ## Empty the
     end
 
     test "heapify" do
-      heap = Heap.new(100)
+      heap = Heap.new(1000_000)
       heap_size = 50
       ## We will now construct an invalid heap
       ## Set heap size
-      Array.put(heap.array, 100+1, heap_size)
+      Array.put(heap.array, 1_000_000+1, heap_size)
       ## Fill out the array with random values
-      values = Enum.take_random(1..1000, heap_size)
+      values = Enum.shuffle(1..1_000_000)
       Enum.each(Enum.with_index(values, 1), fn {val, idx} -> Array.put(heap.array, idx, val) end)
       refute Heap.valid?(heap)
       ## Heapify will force the heap property
