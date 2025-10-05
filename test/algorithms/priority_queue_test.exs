@@ -49,15 +49,15 @@ defmodule InPlace.PriorityQueueTest do
         [2, 2,    2, 3, -1, 17,    45,  19,   2,  4,   9,  -12],
         [2, 74.2, 0, 1,  8, 22.5, -3.7, -0.5, 4,  3.9, 5.1, 120])
         |> Enum.shuffle()
+        #|> IO.inspect(label: :data)
 
         q = Q.new(length(priorities))
       Enum.each(priorities, fn {key, priority} -> Q.insert(q, key, priority) end)
 
-      desc_sorted = Enum.reduce(1..length(priorities), [],
-        fn _, acc -> [Q.extract_min(q) | acc] end
+      desc_sorted = Enum.reduce_while(1..length(priorities), [],
+        fn _, acc -> p = Q.extract_min(q)
+          p && {:cont, [p | acc]} || {:halt, acc} end
       )
-      ## filter out nil values resulted from duplicate priorities
-      |> Enum.filter(fn x -> x end)
 
       ## For duplicates in original priorities list,
       ## we'll leave the ones with lesser priority

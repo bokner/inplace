@@ -27,6 +27,7 @@ defmodule InPlace.Heap do
       %{
         capacity: capacity,
         array: ref,
+        key_positions: Array.new(capacity),
         comparator: Keyword.get(opts, :comparator),
         getter: Keyword.get(opts, :getter)
       }
@@ -35,7 +36,7 @@ defmodule InPlace.Heap do
 
   def default_opts() do
     [
-      comparator: &Kernel.</2,
+      comparator: &Kernel.<=/2,
       getter: fn key -> key end
     ]
   end
@@ -106,11 +107,12 @@ defmodule InPlace.Heap do
     current_min
   end
 
-  def insert(%{capacity: capacity, array: array} = heap, key) when is_integer(key) do
+  def insert(%{capacity: capacity, key_positions: positions, array: array} = heap, key) when is_integer(key) do
     current_size = size(heap)
     if capacity == current_size, do: throw(:heap_over_capacity)
     new_size = current_size + 1
     Array.put(array, new_size, key)
+    set_key_position(positions, new_size, new_size)
     inc_size(heap)
     sift_up(heap, new_size)
   end
@@ -123,7 +125,11 @@ defmodule InPlace.Heap do
 
   ## enforce heap property on the array
   def heapify(heap) do
-    starting_position = parent_position(size(heap))
+    heapify(heap, size(heap))
+  end
+
+  def heapify(heap, position) do
+    starting_position = parent_position(position)
 
     Enum.each(starting_position..1//-1, fn pos ->
       sift_down(heap, pos)
@@ -138,11 +144,23 @@ defmodule InPlace.Heap do
     Array.update(array, size_address(capacity), fn size -> size + delta end)
   end
 
-  ## Get the key (pointer to data) given the position in the heap.
-  def get_key(%{array: array} = heap, position, heap_size \\ nil) when is_integer(position) do
-    size = heap_size || size(heap)
-    if position <= size, do: Array.get(array, position)
+  defp set_key_position(positions, index, position) do
+    Array.put(positions, index, position)
   end
+
+  def get_key(heap , position, heap_size \\ nil)
+  ## Get the external key (pointer to external data) given the position in the heap.
+  def get_key(%{array: array} = heap, position, heap_size) when is_integer(position) do
+    size = heap_size || size(heap)
+    if position <= size, do: Array.get(array,
+      position
+      )
+  end
+
+  def get_key(%{key_positions: positions} = heap, {:key_index, index}, heap_size) when is_integer(index) do
+    get_key(heap, Array.get(positions, index), heap_size)
+  end
+
 
   defp get_left_child_key(heap, parent_position) do
     get_key(heap, left_child_position(parent_position))
@@ -169,31 +187,34 @@ defmodule InPlace.Heap do
     position <= size
   end
 
-  defp sift_up(heap, position, key \\ nil)
+  def sift_up(heap, position, key \\ nil)
 
-  defp sift_up(_heap, 1, _) do
-    :ok
+  def sift_up(_heap, 1, _) do
+    1
   end
 
-  defp sift_up(%{comparator: compare_fun} = heap, position, key) do
+  def sift_up(%{comparator: compare_fun} = heap, position, key) do
     parent = parent_position(position)
     p_key = get_key(heap, parent)
     c_key = key || get_key(heap, position)
 
     if compare_fun.(p_key, c_key) do
-      :ok
+      position
     else
       swap_elements(heap, {parent, p_key}, {position, c_key})
       sift_up(heap, parent, c_key)
     end
   end
 
-  defp swap_elements(%{array: array} = _heap, {position1, key1}, {position2, key2}) do
-    Array.put(array, position1, key2)
-    Array.put(array, position2, key1)
+  defp swap_elements(%{array: array, key_positions: positions} = _heap, {position1, key1}, {position2, key2}) do
+#    if key1 != key2 do
+      Array.put(array, position1, key2)
+      Array.put(array, position2, key1)
+      Array.swap(positions, position1, position2)
+#    end
   end
 
-  defp sift_down(heap, position) do
+  def sift_down(heap, position) do
     sift_down(heap, position, get_key(heap, position), size(heap))
   end
 
@@ -201,7 +222,7 @@ defmodule InPlace.Heap do
   defp sift_down(%{comparator: compare_fun} = heap, position, key, size) do
     cond do
       position > div(size, 2) ->
-        :ok
+        position
 
       true ->
         left_p = left_child_position(position)

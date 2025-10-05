@@ -18,8 +18,12 @@ defmodule InPlace.Array do
     end
   end
 
+  def put(array, idx, nil) when is_integer(idx) do
+    delete(array, idx)
+  end
+
   def put(array, idx, value) when is_integer(idx) and is_integer(value) do
-    :atomics.put(array, idx, value)
+    :atomics.put(array, idx, value || @null)
   end
 
   def delete(array, idx) do
