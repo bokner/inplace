@@ -58,11 +58,7 @@ defmodule InPlace.PriorityQueue do
         ## new priority is strictly less then the current one
         if !Keyword.get(opts, :comparator).(current_priority, priority) do
           update_mapping(mapping, existing_key, priority, key_index)
-          Heap.heapify(heap)
-          ## TODO: switch to Heap.sift_up
-          ## use Heap.get_key with {:key_index, key_index}
-          #Heap.sift_up(heap, size(p_queue))
-          #update_mapping(mapping, existing_key, priority, Heap.get)
+          Heap.sift_up(heap, Heap.get_key_position(heap, key_index))
         end
     end
   end

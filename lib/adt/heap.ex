@@ -27,7 +27,8 @@ defmodule InPlace.Heap do
       %{
         capacity: capacity,
         array: ref,
-        key_positions: Array.new(capacity),
+        index_positions: Array.new(capacity),
+        position_indices: Array.new(capacity),
         comparator: Keyword.get(opts, :comparator),
         getter: Keyword.get(opts, :getter)
       }
@@ -107,12 +108,16 @@ defmodule InPlace.Heap do
     current_min
   end
 
-  def insert(%{capacity: capacity, key_positions: positions, array: array} = heap, key) when is_integer(key) do
+  def insert(%{capacity: capacity,
+    index_positions: index_positions,
+    position_indices: position_indices,
+    array: array} = heap, key) when is_integer(key) do
     current_size = size(heap)
     if capacity == current_size, do: throw(:heap_over_capacity)
     new_size = current_size + 1
     Array.put(array, new_size, key)
-    set_key_position(positions, new_size, new_size)
+    Array.put(index_positions, new_size, new_size)
+    Array.put(position_indices, new_size, new_size)
     inc_size(heap)
     sift_up(heap, new_size)
   end
@@ -144,10 +149,6 @@ defmodule InPlace.Heap do
     Array.update(array, size_address(capacity), fn size -> size + delta end)
   end
 
-  defp set_key_position(positions, index, position) do
-    Array.put(positions, index, position)
-  end
-
   def get_key(heap , position, heap_size \\ nil)
   ## Get the external key (pointer to external data) given the position in the heap.
   def get_key(%{array: array} = heap, position, heap_size) when is_integer(position) do
@@ -157,8 +158,12 @@ defmodule InPlace.Heap do
       )
   end
 
-  def get_key(%{key_positions: positions} = heap, {:key_index, index}, heap_size) when is_integer(index) do
-    get_key(heap, Array.get(positions, index), heap_size)
+  def get_key(heap, {:key_index, index}, heap_size) when is_integer(index) do
+    get_key(heap, get_key_position(heap, index), heap_size)
+  end
+
+  def get_key_position(%{index_positions: positions} = _heap, index) do
+    Array.get(positions, index)
   end
 
 
@@ -206,12 +211,30 @@ defmodule InPlace.Heap do
     end
   end
 
-  defp swap_elements(%{array: array, key_positions: positions} = _heap, {position1, key1}, {position2, key2}) do
-#    if key1 != key2 do
+  defp swap_elements(%{array: array,
+    index_positions: index_positions,
+    position_indices: position_indices,
+    } = _heap, {position1, key1}, {position2, key2}) when
+      is_integer(position1) and is_integer(position2) and is_integer(key1) and is_integer(key2) do
       Array.put(array, position1, key2)
       Array.put(array, position2, key1)
-      Array.swap(positions, position1, position2)
-#    end
+
+      ## Update position -> key index and
+      ## key index -> position maps
+      case Array.get(position_indices, position1) do
+        nil -> :ok
+        key_index1 ->
+        case Array.get(position_indices, position2) do
+          nil -> :ok
+          key_index2 ->
+            Array.put(position_indices, position2, key_index1)
+            Array.put(position_indices, position1, key_index2)
+
+            Array.put(index_positions, key_index1, position2)
+            Array.put(index_positions, key_index2, position1)
+          end
+        end
+
   end
 
   def sift_down(heap, position) do
