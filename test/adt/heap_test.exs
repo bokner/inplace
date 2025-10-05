@@ -31,13 +31,13 @@ defmodule InPlace.HeapTest do
     end
 
     test "heapify" do
-      heap = Heap.new(1000_000)
-      heap_size = 50
+      heap_size = 100_000
+      heap = Heap.new(heap_size)
       ## We will now construct an invalid heap
       ## Set heap size
-      Array.put(heap.array, 1_000_000+1, heap_size)
+      Array.put(heap.array, heap_size + 1, heap_size)
       ## Fill out the array with random values
-      values = Enum.shuffle(1..1_000_000)
+      values = Enum.shuffle(1..heap_size)
       Enum.each(Enum.with_index(values, 1), fn {val, idx} -> Array.put(heap.array, idx, val) end)
       refute Heap.valid?(heap)
       ## Heapify will force the heap property
