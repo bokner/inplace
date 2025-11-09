@@ -58,12 +58,9 @@ defmodule InPlace.LinkedList do
     Array.put(next, allocated, old_head)
   end
 
-  def add(%{next: pointers, refs: refs} = list, idx, data)
-      when is_integer(data) and is_integer(idx) do
+  def insert(%{next: pointers, refs: refs} = list, idx, data)
+      when is_integer(data) and is_integer(idx) and idx > 0 do
     cond do
-      idx == 0 ->
-        add_first(list, data)
-
       idx > size(list) ->
         {:error, {:no_index, idx}}
 
@@ -80,7 +77,11 @@ defmodule InPlace.LinkedList do
   end
 
   def add_last(list, data) when is_integer(data) do
-    add(list, size(list), data)
+    if empty?(list) do
+      add_first(list, data)
+    else
+      insert(list, size(list), data)
+    end
   end
 
   def delete(%{next: pointers} = list, idx) when is_integer(idx) and idx > 0 do

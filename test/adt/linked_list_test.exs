@@ -21,6 +21,9 @@ defmodule InPlace.LinkedListTest do
     assert LinkedList.to_list(ll) == [3, 1, 2]
     LinkedList.delete(ll, 2)
     assert LinkedList.to_list(ll) == [3, 2]
+
+    LinkedList.insert(ll, 1, 4)
+    assert LinkedList.to_list(ll) == [3, 4, 2]
   end
 
   test "mapper" do
