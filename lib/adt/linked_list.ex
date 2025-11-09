@@ -1,12 +1,12 @@
 defmodule InPlace.LinkedList do
   @moduledoc """
-    Single-linked list.
-    The data entries are stored as integers.
-    they will be interpreted (as references) by the calling application.
-    Note: indices are 1-based.
-    Options:
-      - mapper_fun (optional, &Function.identity/1 by default): Maps data entries to application data
-    """
+  [Singly linked list](https://en.wikipedia.org/wiki/Linked_list#Singly_linked_list)
+  The data entries are stored as integers.
+  they will be interpreted (as references) by the calling application.
+  Note: indices are 1-based.
+  Options:
+    - :mapper_fun (optional, &Function.identity/1 by default) - maps data entries to application data
+  """
   alias InPlace.{Array, Stack}
 
   ## List terminator
@@ -14,11 +14,18 @@ defmodule InPlace.LinkedList do
 
   def new(size, opts \\ []) when is_integer(size) and size > 0 do
     opts = Keyword.merge(default_opts(), opts)
+
     %{
       capacity: size,
+      ## holds the pointer to the first element of the list
+      handle: Array.new(1, @terminator),
+      # pointers (links) to the next element
       next: init_links(size),
+      # keeps unused pointers
       free: init_free(size),
+      # references to the data
       refs: :atomics.new(size, signed: true),
+      # mapper `reference -> data`
       mapper_fun: Keyword.get(opts, :mapper_fun)
     }
   end
@@ -46,16 +53,18 @@ defmodule InPlace.LinkedList do
     get_pointer(list, next(list, pointer), step + 1, idx)
   end
 
-  ## insert at the head
   def add_first(%{next: next, refs: refs} = list, data) when is_integer(data) do
     ## Store data in 'free' element of the list
     allocated = allocate(list)
     Array.put(refs, allocated, data)
-    ## Have 'head' point to the new element
-    old_head = get_and_update_head(list, fn _ -> allocated end)
+    ## Have 'handle' point to the new element
+    _old_handle = get_and_update_handle(list, fn handle ->
+      Array.put(next, allocated, handle)
+      allocated
+    end)
 
-    ## Update pointer to next element with current head
-    Array.put(next, allocated, old_head)
+    ## Return the pointer for allocated element
+    {:ok, allocated}
   end
 
   def insert(%{next: pointers, refs: refs} = list, idx, data)
@@ -88,9 +97,12 @@ defmodule InPlace.LinkedList do
     cond do
       idx > size(list) ->
         {:error, {:no_index, idx}}
-      idx == 1 -> # Removing head
+
+      # Removing first element of the list
+      idx == 1 ->
         deallocate(list, idx)
-        get_and_update_head(list, fn head -> next(list, head) end)
+        get_and_update_handle(list, fn handle -> next(list, handle) end)
+
       true ->
         pointer = get_pointer(list, idx - 1)
         deallocate(list, idx)
@@ -110,13 +122,6 @@ defmodule InPlace.LinkedList do
     to_list(list, next(list, pointer), [mapper.(data(list, pointer)) | acc])
   end
 
-  def reduce(array, initial_value, reducer \\ fn el, acc -> [el | acc] end)
-      when is_function(reducer) do
-    Enum.reduce(1..size(array), initial_value, fn idx, acc ->
-      reducer.(:atomics.get(array, idx), acc)
-    end)
-  end
-
   def empty?(list) do
     head(list) == @terminator
   end
@@ -133,11 +138,9 @@ defmodule InPlace.LinkedList do
 
   ## Implementation
   ##
-  ## Allocate links; the last element will hold the 'head' pointer
+  ## Allocate links (pointers to the next element)
   defp init_links(size) do
-    ref = :atomics.new(size + 1, signed: false)
-    Array.put(ref, size + 1, @terminator)
-    ref
+    :atomics.new(size, signed: false)
   end
 
   ## The stack for tracking 'free' indices
@@ -149,14 +152,13 @@ defmodule InPlace.LinkedList do
     ref
   end
 
-  defp head(%{capacity: capacity, next: next} = _list) do
-    Array.get(next, capacity + 1)
+  defp head(%{handle: handle} = _list) do
+    Array.get(handle, 1)
   end
 
-  defp get_and_update_head(%{capacity: capacity, next: next} = list, update_fun) do
+  defp get_and_update_handle(%{handle: handle} = list, update_fun) do
     current_head = head(list)
-    Array.put(next, capacity + 1, update_fun.(current_head))
-    current_head
+    Array.put(handle, 1, update_fun.(current_head))
   end
 
   defp data(%{refs: refs} = _list, pointer) do
