@@ -53,18 +53,23 @@ defmodule InPlace.LinkedList do
     get_pointer(list, next(list, pointer), step + 1, idx)
   end
 
-  def add_first(%{next: next, refs: refs} = list, data) when is_integer(data) do
+  def add_first(%{next: next} = list, data) when is_integer(data) do
+    add_first(list, data, fn head, allocated ->
+      Array.put(next, allocated, head)
+      ## Allocated element becomes the new head
+      allocated
+    end)
+  end
+
+  ## Why are we passing update_head_fun rather than directly call it?
+  ## Because we want to reuse the shared logic with other implementations of
+  ## linked list (see DLinkedList for an example)
+  def add_first(%{refs: refs} = list, data, update_head_fun) when is_integer(data) do
     ## Store data in 'free' element of the list
     allocated = allocate(list)
     Array.put(refs, allocated, data)
     ## Have 'handle' point to the new element
-    _old_handle = get_and_update_handle(list, fn handle ->
-      Array.put(next, allocated, handle)
-      allocated
-    end)
-
-    ## Return the pointer for allocated element
-    {:ok, allocated}
+    _old_handle = get_and_update_handle(list, fn head -> update_head_fun.(head, allocated) end)
   end
 
   def insert(%{next: pointers, refs: refs} = list, idx, data)
