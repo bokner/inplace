@@ -18,6 +18,7 @@ defmodule InPlace.LinkedList do
   def new(size, opts \\ []) when is_integer(size) and size > 0 do
     opts = Keyword.merge(default_opts(), opts)
     mode = Keyword.get(opts, :mode)
+
     if mode not in [@singly_linked_mode, @doubly_linked_mode] do
       throw({:error, {:unknown_mode, mode}})
     end
@@ -69,7 +70,6 @@ defmodule InPlace.LinkedList do
     get_pointer(list, next(list, pointer), step + 1, idx)
   end
 
-
   def add_first(list, data) when is_integer(data) do
     ## Store data in 'free' element of the list
     allocated = allocate(list)
@@ -87,6 +87,7 @@ defmodule InPlace.LinkedList do
 
   defp add_first_mode(%{mode: @doubly_linked_mode} = list, head, allocated) do
     set_previous(list, allocated, @terminator)
+
     if head(list) == @terminator do
       set_tail(list, allocated)
     else
@@ -136,37 +137,34 @@ defmodule InPlace.LinkedList do
   end
 
   def delete(%{mode: mode} = list, idx) when is_integer(idx) and idx > 0 do
-    cond do
-      idx > size(list) ->
-        {:error, {:no_index, idx}}
-
-      # Removing first element of the list
-      idx == 1 ->
-        deallocate(list, idx)
-        head = head(list)
-        set_head(list, next(list, head))
-        if mode == @doubly_linked_mode && head != @terminator do
-          set_previous(list, head, @terminator)
-        end
-
-      true ->
-        pointer = get_pointer(list, idx - 1)
-        next_pointer = next(list, pointer)
-        deallocate(list, idx)
-        set_next(list, pointer, next(list, next_pointer))
-    end
-  end
-
-  defp delete_mode(%{mode: @singly_linked_mode} = _list, _pointer, _next_pointer, _last?) do
-    :ok
-  end
-
-  defp delete_mode(%{handle: handle, mode: @doubly_linked_mode, prev: prev} = _list, pointer, next_pointer, last?) do
-    prev_element = Array.get(prev, pointer)
-    if last? do
-      Array.put(handle, 2, prev_element)
+    if idx > size(list) do
+      {:error, {:no_index, idx}}
     else
-      Array.put(prev, prev_element, next_pointer)
+      deallocate(list, idx)
+      # Removing first element of the list
+      if idx == 1 do
+        head = head(list)
+        next_head = next(list, head)
+        set_head(list, next_head)
+
+        if mode == @doubly_linked_mode && next_head != @terminator do
+          set_previous(list, next_head, @terminator)
+        end
+      else
+        pointer = get_pointer(list, idx - 1)
+        pointer_to_delete = next(list, pointer)
+        pointer_next = next(list, pointer_to_delete)
+        set_next(list, pointer, pointer_next)
+
+        if mode == @doubly_linked_mode do
+          if pointer_to_delete == tail(list) do
+            ## Last element
+            set_tail(list, pointer)
+          else
+            set_previous(list, pointer_next, pointer)
+          end
+        end
+      end
     end
   end
 
@@ -203,14 +201,16 @@ defmodule InPlace.LinkedList do
   ## First element - pointer to the head
   ## Second element (for :doubly_linked) is a tail
   defp init_handle(mode) do
-    size = if mode == @singly_linked_mode do
-      1
-    else
-      2
-    end
+    size =
+      if mode == @singly_linked_mode do
+        1
+      else
+        2
+      end
 
     Array.new(size, @terminator)
   end
+
   ## Allocate links (pointers to the next element)
   defp init_links(size) do
     :atomics.new(size, signed: false)
@@ -261,8 +261,12 @@ defmodule InPlace.LinkedList do
     Array.put(refs, pointer, data_ref)
   end
 
-  def set_head(%{handle: handle} = _list, pointer) do
+  def set_head(%{handle: handle} = list, pointer) do
     Array.put(handle, 1, pointer)
+
+    if pointer == @terminator || size(list) == 1 do
+      set_tail(list, pointer)
+    end
   end
 
   def set_tail(%{handle: handle, mode: @doubly_linked_mode} = _list, pointer) do

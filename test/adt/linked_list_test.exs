@@ -51,4 +51,45 @@ defmodule InPlace.LinkedListTest do
       assert LinkedList.empty?(ll)
     end
   end
+
+  describe "Doubly linked list" do
+    import InPlace.LinkedList
+    @terminator 0
+    test "operation" do
+      dll = new(10, mode: :doubly_linked)
+      assert tail(dll) == @terminator
+      assert head(dll) == tail(dll)
+      add_last(dll, 1)
+      assert head(dll) == tail(dll)
+      refute tail(dll) == @terminator
+      ## Remove single element
+      delete(dll, 1)
+      assert tail(dll) == @terminator
+      ## Add several elements...
+      add_first(dll, 1)
+      add_first(dll, 2)
+      insert(dll, 1, 3)
+      assert [2, 3, 1] == to_list(dll)
+      ## Traverse back
+      assert_traverse(dll)
+      ## Remove some element
+      delete(dll, Enum.random([1, 2, 3]))
+      ## Traverse back after removal
+      assert_traverse(dll)
+    end
+
+    defp assert_traverse(dll) do
+      forward_list = to_list(dll)
+      {@terminator, back_traversed_list} = traverse_back(dll)
+      assert forward_list == back_traversed_list
+    end
+
+    defp traverse_back(dll) do
+      Enum.reduce(1..size(dll), {tail(dll), []},
+        fn _, {p, acc} -> {prev(dll, p), [data(dll, p) | acc]}
+      end)
+    end
+
+  end
+
 end
