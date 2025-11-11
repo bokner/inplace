@@ -5,20 +5,30 @@ defmodule InPlace.LinkedList do
   they will be interpreted (as references) by the calling application.
   Note: indices are 1-based.
   Options:
+    - `mode` :: :singly_linked | :doubly_linked
     - :mapper_fun (optional, &Function.identity/1 by default) - maps data entries to application data
   """
   alias InPlace.{Array, Stack}
 
   ## List terminator
   @terminator 0
+  @singly_linked_mode :singly_linked
+  @doubly_linked_mode :doubly_linked
 
   def new(size, opts \\ []) when is_integer(size) and size > 0 do
     opts = Keyword.merge(default_opts(), opts)
+    mode = Keyword.get(opts, :mode)
+
+    if mode not in [@singly_linked_mode, @doubly_linked_mode] do
+      throw({:error, {:unknown_mode, mode}})
+    end
 
     %{
       capacity: size,
+      ## mode (:singly_linked or :doubly_linked)
+      mode: Keyword.get(opts, :mode),
       ## holds the pointer to the first element of the list
-      handle: Array.new(1, @terminator),
+      handle: init_handle(mode),
       # pointers (links) to the next element
       next: init_links(size),
       # keeps unused pointers
@@ -28,12 +38,19 @@ defmodule InPlace.LinkedList do
       # mapper `reference -> data`
       mapper_fun: Keyword.get(opts, :mapper_fun)
     }
+    |> then(fn state ->
+      if mode == @doubly_linked_mode do
+        Map.put(state, :prev, init_links(size))
+      else
+        state
+      end
+    end)
   end
 
-  def get(%{mapper_fun: mapper} = list, idx) when is_integer(idx) and idx > 0 do
+  def get(list, idx) when is_integer(idx) and idx > 0 do
     case get_pointer(list, idx) do
       nil -> nil
-      pointer -> mapper.(data(list, pointer))
+      pointer -> data(list, pointer)
     end
   end
 
@@ -53,21 +70,32 @@ defmodule InPlace.LinkedList do
     get_pointer(list, next(list, pointer), step + 1, idx)
   end
 
-  def add_first(%{next: next, refs: refs} = list, data) when is_integer(data) do
+  def add_first(list, data) when is_integer(data) do
     ## Store data in 'free' element of the list
     allocated = allocate(list)
-    Array.put(refs, allocated, data)
-    ## Have 'handle' point to the new element
-    _old_handle = get_and_update_handle(list, fn handle ->
-      Array.put(next, allocated, handle)
-      allocated
-    end)
-
-    ## Return the pointer for allocated element
-    {:ok, allocated}
+    set_data(list, allocated, data)
+    head = head(list)
+    set_next(list, allocated, head)
+    add_first_mode(list, head, allocated)
+    ## Allocated element becomes the new head
+    set_head(list, allocated)
   end
 
-  def insert(%{next: pointers, refs: refs} = list, idx, data)
+  defp add_first_mode(%{mode: @singly_linked_mode} = _list, _head, _allocated) do
+    :ok
+  end
+
+  defp add_first_mode(%{mode: @doubly_linked_mode} = list, head, allocated) do
+    set_previous(list, allocated, @terminator)
+
+    if head(list) == @terminator do
+      set_tail(list, allocated)
+    else
+      set_previous(list, head, allocated)
+    end
+  end
+
+  def insert(%{mode: mode} = list, idx, data)
       when is_integer(data) and is_integer(idx) and idx > 0 do
     cond do
       idx > size(list) ->
@@ -78,10 +106,25 @@ defmodule InPlace.LinkedList do
 
       true ->
         idx_pointer = get_pointer(list, idx)
+        next_pointer = next(list, idx_pointer)
         allocated = allocate(list)
-        Array.put(refs, allocated, data)
-        Array.put(pointers, allocated, next(list, idx_pointer))
-        Array.put(pointers, idx_pointer, allocated)
+        set_data(list, allocated, data)
+        set_next(list, allocated, next_pointer)
+        set_next(list, idx_pointer, allocated)
+        ## Build `prev` links
+        ## allocated.prev <- idx_pointer
+        if mode == @doubly_linked_mode do
+          set_previous(list, allocated, idx_pointer)
+          ## allocated.next.prev <- allocated
+          if next_pointer == @terminator do
+            ## insertion at the end - update the tail
+            set_tail(list, allocated)
+          else
+            ## insertion in between - point the `prev` link of next pointer
+            ## to newly allocated element
+            set_previous(list, next_pointer, allocated)
+          end
+        end
     end
   end
 
@@ -93,20 +136,35 @@ defmodule InPlace.LinkedList do
     end
   end
 
-  def delete(%{next: pointers} = list, idx) when is_integer(idx) and idx > 0 do
-    cond do
-      idx > size(list) ->
-        {:error, {:no_index, idx}}
-
+  def delete(%{mode: mode} = list, idx) when is_integer(idx) and idx > 0 do
+    if idx > size(list) do
+      {:error, {:no_index, idx}}
+    else
+      deallocate(list, idx)
       # Removing first element of the list
-      idx == 1 ->
-        deallocate(list, idx)
-        get_and_update_handle(list, fn handle -> next(list, handle) end)
+      if idx == 1 do
+        head = head(list)
+        next_head = next(list, head)
+        set_head(list, next_head)
 
-      true ->
+        if mode == @doubly_linked_mode && next_head != @terminator do
+          set_previous(list, next_head, @terminator)
+        end
+      else
         pointer = get_pointer(list, idx - 1)
-        deallocate(list, idx)
-        Array.put(pointers, pointer, next(list, next(list, pointer)))
+        pointer_to_delete = next(list, pointer)
+        pointer_next = next(list, pointer_to_delete)
+        set_next(list, pointer, pointer_next)
+
+        if mode == @doubly_linked_mode do
+          if pointer_to_delete == tail(list) do
+            ## Last element
+            set_tail(list, pointer)
+          else
+            set_previous(list, pointer_next, pointer)
+          end
+        end
+      end
     end
   end
 
@@ -118,8 +176,8 @@ defmodule InPlace.LinkedList do
     Enum.reverse(acc)
   end
 
-  defp to_list(%{mapper_fun: mapper} = list, pointer, acc) do
-    to_list(list, next(list, pointer), [mapper.(data(list, pointer)) | acc])
+  defp to_list(list, pointer, acc) do
+    to_list(list, next(list, pointer), [data(list, pointer) | acc])
   end
 
   def empty?(list) do
@@ -132,12 +190,27 @@ defmodule InPlace.LinkedList do
 
   def default_opts() do
     [
+      mode: @singly_linked_mode,
       mapper_fun: &Function.identity/1
     ]
   end
 
-  ## Implementation
+  ## Helpers
   ##
+  ## Initialize handle.
+  ## First element - pointer to the head
+  ## Second element (for :doubly_linked) is a tail
+  defp init_handle(mode) do
+    size =
+      if mode == @singly_linked_mode do
+        1
+      else
+        2
+      end
+
+    Array.new(size, @terminator)
+  end
+
   ## Allocate links (pointers to the next element)
   defp init_links(size) do
     :atomics.new(size, signed: false)
@@ -152,28 +225,83 @@ defmodule InPlace.LinkedList do
     ref
   end
 
-  defp head(%{handle: handle} = _list) do
+  def head(%{handle: handle} = _list) do
     Array.get(handle, 1)
   end
 
-  defp get_and_update_handle(%{handle: handle} = list, update_fun) do
-    current_head = head(list)
-    Array.put(handle, 1, update_fun.(current_head))
+  def tail(%{mode: @singly_linked_mode} = _list) do
+    nil
   end
 
-  defp data(%{refs: refs} = _list, pointer) do
-    Array.get(refs, pointer)
+  def tail(%{handle: handle, mode: @doubly_linked_mode}) do
+    Array.get(handle, 2)
   end
 
-  defp next(%{next: pointers} = _list, pointer) do
+  def set_next(_list, @terminator, _next_pointer) do
+    :noop
+  end
+
+  def set_next(%{next: pointers} = _list, pointer, next_pointer) do
+    Array.put(pointers, pointer, next_pointer)
+  end
+
+  def set_previous(_list, @terminator, _next_pointer) do
+    :noop
+  end
+
+  def set_previous(%{mode: @doubly_linked_mode, prev: pointers} = _list, pointer, prev_pointer) do
+    Array.put(pointers, pointer, prev_pointer)
+  end
+
+  def set_previous(_list, _pointer, _prev_pointer) do
+    :noop
+  end
+
+  def set_data(%{refs: refs} = _list, pointer, data_ref) do
+    Array.put(refs, pointer, data_ref)
+  end
+
+  def set_head(%{handle: handle} = list, pointer) do
+    Array.put(handle, 1, pointer)
+
+    if pointer == @terminator || size(list) == 1 do
+      set_tail(list, pointer)
+    end
+  end
+
+  def set_tail(%{handle: handle, mode: @doubly_linked_mode} = _list, pointer) do
+    Array.put(handle, 2, pointer)
+  end
+
+  def set_tail(_list, _pointer) do
+    :noop
+  end
+
+  def data(%{refs: refs, mapper_fun: mapper} = _list, pointer) do
+    mapper.(Array.get(refs, pointer))
+  end
+
+  def next(_list, @terminator) do
+    nil
+  end
+
+  def next(%{next: pointers} = _list, pointer) do
     Array.get(pointers, pointer)
   end
 
-  defp allocate(%{free: free} = _list) do
+  def prev(_list, @terminator) do
+    nil
+  end
+
+  def prev(%{prev: pointers} = _list, pointer) do
+    Array.get(pointers, pointer)
+  end
+
+  def allocate(%{free: free} = _list) do
     Stack.pop(free) || throw(:list_over_capacity)
   end
 
-  defp deallocate(%{free: free} = _list, idx) when is_integer(idx) and idx > 0 do
+  def deallocate(%{free: free} = _list, idx) when is_integer(idx) and idx > 0 do
     Stack.push(free, idx)
   end
 end
