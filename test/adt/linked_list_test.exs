@@ -34,6 +34,15 @@ defmodule InPlace.LinkedListTest do
       assert LinkedList.to_list(ll) == [:a, :b, :c]
     end
 
+    test "reducer" do
+      ll = LinkedList.new(5)
+      Enum.each(1..5, fn value -> LinkedList.add_first(ll, value) end)
+      ## Sum up by reduction
+      reducer_fun = fn p, acc -> LinkedList.data(ll, p) + acc end
+      ## Compare with summing up the list
+      assert LinkedList.reduce(ll, 0, reducer_fun) == LinkedList.to_list(ll) |> Enum.sum()
+    end
+
     test "recycling of indices" do
       ll = LinkedList.new(3)
 

@@ -187,6 +187,24 @@ defmodule InPlace.LinkedList do
     to_list(list, next_pointer(list, pointer), [data(list, pointer) | acc])
   end
 
+  ## Reduce over the list
+  def reduce(list, initial_value, reducer \\ nil) do
+    reduce_impl(list, head(list), initial_value, reducer ||
+      (fn p, acc ->
+        [data(list, p) | acc]
+      end)
+    )
+  end
+
+  defp reduce_impl(list, pointer, acc, reducer) when is_function(reducer, 2) do
+    if pointer == @terminator do
+      acc
+    else
+      next = next_pointer(list, pointer)
+      reduce_impl(list, next, reducer.(pointer, acc), reducer)
+    end
+  end
+
   def empty?(list) do
     head(list) == @terminator
   end
