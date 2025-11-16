@@ -72,7 +72,7 @@ defmodule InPlace.LinkedList do
   end
 
   defp get_pointer(list, pointer, step, idx) do
-    get_pointer(list, next_pointer(list, pointer), step + 1, idx)
+    get_pointer(list, next(list, pointer), step + 1, idx)
   end
 
   def add_first(list, data) when is_integer(data) do
@@ -145,11 +145,11 @@ defmodule InPlace.LinkedList do
     if idx > size(list) do
       {:error, {:no_index, idx}}
     else
-      deallocate(list, idx)
       # Removing first element of the list
       if idx == 1 do
-        head = head(list)
-        next_head = next_pointer(list, head)
+        current_head = head(list)
+        deallocate(list, current_head)
+        next_head = next_pointer(list, current_head)
         set_head(list, next_head)
 
         if mode == @doubly_linked_mode && next_head != @terminator do
@@ -158,6 +158,7 @@ defmodule InPlace.LinkedList do
       else
         pointer = get_pointer(list, idx - 1)
         pointer_to_delete = next_pointer(list, pointer)
+        deallocate(list, pointer_to_delete)
         pointer_next = next_pointer(list, pointer_to_delete)
         set_next(list, pointer, pointer_next)
 
@@ -302,15 +303,6 @@ defmodule InPlace.LinkedList do
       end
   end
 
-  ## This call ignores `circular`
-  ## We will use it when updating the list,
-  ## so we can treat internal structure uniformly,
-  ## and apply logic for `circular` separately
-  ## for the navigation through the list.
-  defp next_pointer(%{next: pointers} = _list, pointer) do
-    Array.get(pointers, pointer)
-  end
-
   def prev(_list, @terminator) do
     nil
   end
@@ -325,6 +317,16 @@ defmodule InPlace.LinkedList do
   end
 
 
+  ## The `next_pointer/2` and `prev_pointer/2` functions ignore `circular` option,
+  ## and act based on position of list terminator.
+  ## We will use it when updating the list,
+  ## so we can treat internal structure uniformly.
+  ## The navigation over circular lists is implemented by next/2 and prev/2.
+  ##
+  defp next_pointer(%{next: pointers} = _list, pointer) do
+    Array.get(pointers, pointer)
+  end
+
   defp prev_pointer(%{prev: pointers} =  _list, pointer) do
     Array.get(pointers, pointer)
   end
@@ -337,7 +339,7 @@ defmodule InPlace.LinkedList do
     Stack.pop(free) || throw(:list_over_capacity)
   end
 
-  def deallocate(%{free: free} = _list, idx) when is_integer(idx) and idx > 0 do
-    Stack.push(free, idx)
+  def deallocate(%{free: free} = _list, pointer) when is_integer(pointer) and pointer > 0 do
+    Stack.push(free, pointer)
   end
 end
