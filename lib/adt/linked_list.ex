@@ -2,11 +2,14 @@ defmodule InPlace.LinkedList do
   @moduledoc """
   [Singly linked list](https://en.wikipedia.org/wiki/Linked_list#Singly_linked_list)
   The data entries are stored as integers.
-  they will be interpreted (as references) by the calling application.
+  They will be interpreted (as references) by the calling application.
   Note: indices are 1-based.
   Options:
     - `mode` :: :singly_linked | :doubly_linked
-    - :mapper_fun (optional, &Function.identity/1 by default) - maps data entries to application data
+    - `circular` :: boolean()
+      optional, `false` by default;
+    - `:mapper_fun`  # maps data entries to application data
+      optional, &Function.identity/1 by default
   """
   alias InPlace.{Array, Stack}
 
@@ -27,6 +30,8 @@ defmodule InPlace.LinkedList do
       capacity: size,
       ## mode (:singly_linked or :doubly_linked)
       mode: Keyword.get(opts, :mode),
+      ## circular?
+      circular: Keyword.get(opts, :circular),
       ## holds the pointer to the first element of the list
       handle: init_handle(mode),
       # pointers (links) to the next element
@@ -106,7 +111,7 @@ defmodule InPlace.LinkedList do
 
       true ->
         idx_pointer = get_pointer(list, idx)
-        next_pointer = next(list, idx_pointer)
+        next_pointer = next_pointer(list, idx_pointer)
         allocated = allocate(list)
         set_data(list, allocated, data)
         set_next(list, allocated, next_pointer)
@@ -140,11 +145,11 @@ defmodule InPlace.LinkedList do
     if idx > size(list) do
       {:error, {:no_index, idx}}
     else
-      deallocate(list, idx)
       # Removing first element of the list
       if idx == 1 do
-        head = head(list)
-        next_head = next(list, head)
+        current_head = head(list)
+        deallocate(list, current_head)
+        next_head = next_pointer(list, current_head)
         set_head(list, next_head)
 
         if mode == @doubly_linked_mode && next_head != @terminator do
@@ -152,8 +157,9 @@ defmodule InPlace.LinkedList do
         end
       else
         pointer = get_pointer(list, idx - 1)
-        pointer_to_delete = next(list, pointer)
-        pointer_next = next(list, pointer_to_delete)
+        pointer_to_delete = next_pointer(list, pointer)
+        deallocate(list, pointer_to_delete)
+        pointer_next = next_pointer(list, pointer_to_delete)
         set_next(list, pointer, pointer_next)
 
         if mode == @doubly_linked_mode do
@@ -165,6 +171,7 @@ defmodule InPlace.LinkedList do
           end
         end
       end
+      :ok
     end
   end
 
@@ -177,7 +184,7 @@ defmodule InPlace.LinkedList do
   end
 
   defp to_list(list, pointer, acc) do
-    to_list(list, next(list, pointer), [data(list, pointer) | acc])
+    to_list(list, next_pointer(list, pointer), [data(list, pointer) | acc])
   end
 
   def empty?(list) do
@@ -191,6 +198,7 @@ defmodule InPlace.LinkedList do
   def default_opts() do
     [
       mode: @singly_linked_mode,
+      circular: false,
       mapper_fun: &Function.identity/1
     ]
   end
@@ -238,7 +246,7 @@ defmodule InPlace.LinkedList do
   end
 
   def set_next(_list, @terminator, _next_pointer) do
-    :noop
+    :ok
   end
 
   def set_next(%{next: pointers} = _list, pointer, next_pointer) do
@@ -246,7 +254,7 @@ defmodule InPlace.LinkedList do
   end
 
   def set_previous(_list, @terminator, _next_pointer) do
-    :noop
+    :ok
   end
 
   def set_previous(%{mode: @doubly_linked_mode, prev: pointers} = _list, pointer, prev_pointer) do
@@ -254,7 +262,7 @@ defmodule InPlace.LinkedList do
   end
 
   def set_previous(_list, _pointer, _prev_pointer) do
-    :noop
+    :ok
   end
 
   def set_data(%{refs: refs} = _list, pointer, data_ref) do
@@ -267,6 +275,7 @@ defmodule InPlace.LinkedList do
     if pointer == @terminator || size(list) == 1 do
       set_tail(list, pointer)
     end
+    :ok
   end
 
   def set_tail(%{handle: handle, mode: @doubly_linked_mode} = _list, pointer) do
@@ -274,7 +283,7 @@ defmodule InPlace.LinkedList do
   end
 
   def set_tail(_list, _pointer) do
-    :noop
+    :ok
   end
 
   def data(%{refs: refs, mapper_fun: mapper} = _list, pointer) do
@@ -285,23 +294,52 @@ defmodule InPlace.LinkedList do
     nil
   end
 
-  def next(%{next: pointers} = _list, pointer) do
-    Array.get(pointers, pointer)
+  def next(%{circular: circular?} = list, pointer) do
+    case next_pointer(list, pointer) do
+      @terminator when circular? ->
+        head(list)
+      next_pointer ->
+        next_pointer
+      end
   end
 
   def prev(_list, @terminator) do
     nil
   end
 
-  def prev(%{prev: pointers} = _list, pointer) do
+  def prev(%{circular: circular?} = list, pointer) do
+    case prev_pointer(list, pointer) do
+      @terminator when circular? ->
+        tail(list)
+      next_pointer ->
+        next_pointer
+      end
+  end
+
+
+  ## The `next_pointer/2` and `prev_pointer/2` functions ignore `circular` option,
+  ## and act based on position of list terminator.
+  ## We will use it when updating the list,
+  ## so we can treat internal structure uniformly.
+  ## The navigation over circular lists is implemented by next/2 and prev/2.
+  ##
+  defp next_pointer(%{next: pointers} = _list, pointer) do
     Array.get(pointers, pointer)
+  end
+
+  defp prev_pointer(%{prev: pointers} =  _list, pointer) do
+    Array.get(pointers, pointer)
+  end
+
+  defp prev_pointer(_singly_linked, _pointer) do
+    nil
   end
 
   def allocate(%{free: free} = _list) do
     Stack.pop(free) || throw(:list_over_capacity)
   end
 
-  def deallocate(%{free: free} = _list, idx) when is_integer(idx) and idx > 0 do
-    Stack.push(free, idx)
+  def deallocate(%{free: free} = _list, pointer) when is_integer(pointer) and pointer > 0 do
+    Stack.push(free, pointer)
   end
 end

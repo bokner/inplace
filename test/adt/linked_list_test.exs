@@ -49,47 +49,68 @@ defmodule InPlace.LinkedListTest do
       end)
 
       assert LinkedList.empty?(ll)
+      assert Enum.empty?(LinkedList.to_list(ll))
+    end
+  end
+
+  describe "Circular linked list" do
+    test "navigation" do
+      cll = LinkedList.new(10, circular: true)
+      n = 10
+      ## Add n elements...
+      Enum.each(1..n, fn idx -> LinkedList.add_last(cll, idx) end)
+      ## Get a value at random pointer...
+      random_idx = Enum.random(1..n)
+      random_value = LinkedList.get(cll, random_idx)
+      ## Circle several times...
+      random_idx_circled = random_idx + Enum.random(1..10) * n
+      ## Arrive at the same place
+      assert random_value == LinkedList.get(cll, random_idx_circled)
     end
   end
 
   describe "Doubly linked list" do
     import InPlace.LinkedList
     @terminator 0
-    test "operation" do
-      dll = new(10, mode: :doubly_linked)
-      assert tail(dll) == @terminator
-      assert head(dll) == tail(dll)
-      add_last(dll, 1)
-      assert head(dll) == tail(dll)
-      refute tail(dll) == @terminator
-      ## Remove single element
-      delete(dll, 1)
-      assert tail(dll) == @terminator
-      ## Add several elements...
-      add_first(dll, 1)
-      add_first(dll, 2)
-      insert(dll, 1, 3)
-      assert [2, 3, 1] == to_list(dll)
-      ## Traverse back
-      assert_traverse(dll)
-      ## Remove some element
-      delete(dll, Enum.random([1, 2, 3]))
-      ## Traverse back after removal
-      assert_traverse(dll)
+
+    for circular? <- [true, false] do
+      @tag circular: circular?
+      test "operation (circular = #{circular?})", ctx do
+        dll = new(10, mode: :doubly_linked, circular: ctx.circular)
+        assert tail(dll) == @terminator
+        assert head(dll) == tail(dll)
+        add_last(dll, 1)
+        assert head(dll) == tail(dll)
+        refute tail(dll) == @terminator
+        ## Remove single element
+        delete(dll, 1)
+        assert tail(dll) == @terminator
+        ## Add several elements...
+        add_first(dll, 1)
+        add_first(dll, 2)
+        insert(dll, 1, 3)
+        assert [2, 3, 1] == to_list(dll)
+        ## Traverse back
+        assert_traverse(dll)
+        ## Remove some element
+        delete(dll, Enum.random([1, 2, 3]))
+        ## Traverse back after removal
+        assert_traverse(dll)
+      end
     end
 
     defp assert_traverse(dll) do
       forward_list = to_list(dll)
-      {@terminator, back_traversed_list} = traverse_back(dll)
+      {head, back_traversed_list} = traverse_back(dll)
+      assert head == prev(dll, head(dll))
       assert forward_list == back_traversed_list
     end
 
     defp traverse_back(dll) do
-      Enum.reduce(1..size(dll), {tail(dll), []},
-        fn _, {p, acc} -> {prev(dll, p), [data(dll, p) | acc]}
+      Enum.reduce(1..size(dll), {tail(dll), []}, fn _, {p, acc} ->
+        {prev(dll, p), [data(dll, p) | acc]}
       end)
     end
-
   end
 
 end
