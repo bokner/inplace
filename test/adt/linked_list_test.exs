@@ -114,14 +114,21 @@ defmodule InPlace.LinkedListTest do
       ## Fill the list...
       Enum.each(Enum.shuffle(1..n), fn value -> LinkedList.add_last(dllc, value) end)
       values = LinkedList.to_list(dllc)
+
+      initially_available_pointers = LinkedList.num_free_pointers(dllc)
       ## ...randomly remove all elements
       Enum.each(1..n, fn _idx -> LinkedList.delete(dllc, Enum.random(1..LinkedList.size(dllc))) end)
       ## Officially no elements in the list
       assert Enum.empty?(LinkedList.to_list(dllc))
+      assert LinkedList.size(dllc) == 0
       ## ..restore removed elements
       Enum.each(1..n, fn _idx -> LinkedList.restore(dllc) end)
       ## Values restored
       assert values == LinkedList.to_list(dllc)
+
+      assert LinkedList.size(dllc) == n
+      ## Pointers reclaimed
+      assert initially_available_pointers == LinkedList.num_free_pointers(dllc)
     end
 
     defp assert_traverse(dll) do

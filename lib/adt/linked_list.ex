@@ -163,7 +163,7 @@ defmodule InPlace.LinkedList do
       # Removing first element of the list
       if idx == 1 do
         current_head = head(list)
-        reclaim(list, current_head)
+        delete_pointer(list, current_head)
         next_head = next_pointer(list, current_head)
         set_head(list, next_head)
 
@@ -174,7 +174,7 @@ defmodule InPlace.LinkedList do
       else
         pointer = get_pointer(list, idx - 1)
         pointer_to_delete = next_pointer(list, pointer)
-        reclaim(list, pointer_to_delete)
+        delete_pointer(list, pointer_to_delete)
         pointer_next = next_pointer(list, pointer_to_delete)
         set_next(list, pointer, pointer_next)
 
@@ -374,17 +374,29 @@ defmodule InPlace.LinkedList do
     Stack.pop(free) || throw(:list_over_capacity)
   end
 
-  ## Reclaim the space for removed element
-  def reclaim(%{undo: false, free: free} = _list, pointer) when is_integer(pointer) and pointer > 0 do
-    Stack.push(free, pointer)
+  ## If `undo` is disabled, reclaim the space for removed element
+  def delete_pointer(%{undo: false} = list, pointer) when is_integer(pointer) and pointer > 0 do
+    forget_pointer(list, pointer)
   end
 
   ## If `undo` is enabled, record the pointer to removed element.
   ## Could be restored later for circular doubly linked list
   ## See `restore/1
   ##
-  def reclaim(%{undo: true, removed: removed} = _list, pointer) when is_integer(pointer) and pointer > 0 do
-    Stack.push(removed, pointer)
+  def delete_pointer(%{undo: true} = list, pointer) when is_integer(pointer) and pointer > 0 do
+    hide_pointer(list, pointer)
+  end
+
+  defp forget_pointer(%{free: free} = _list, pointer) do
+    Stack.push(free, pointer)
+  end
+
+  defp hide_pointer(%{removed: removed} = _list, pointer) do
+   Stack.push(removed, pointer)
+  end
+
+  def num_free_pointers(%{free: free} = _list) do
+    Stack.size(free)
   end
 
   def restore(%{undo: true, removed: removed} = list) do
