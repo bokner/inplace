@@ -8,6 +8,9 @@ defmodule InPlace.LinkedList do
     - `mode` :: :singly_linked | :doubly_linked
     - `circular` :: boolean()
       optional, `false` by default;
+    - `undo` :: boolean()
+      If true (`false` by default), the removed elements can be restored, one at time, in reverse order
+       (see `restore/1`). This can be used as a mechanism for backtracking
     - `:mapper_fun`  # maps data entries to application data
       optional, &Function.identity/1 by default
   """
@@ -21,6 +24,8 @@ defmodule InPlace.LinkedList do
   def new(size, opts \\ []) when is_integer(size) and size > 0 do
     opts = Keyword.merge(default_opts(), opts)
     mode = Keyword.get(opts, :mode)
+    circular? = Keyword.get(opts, :circular)
+    undo? = Keyword.get(opts, :undo) && circular? && mode == @doubly_linked_mode
 
     if mode not in [@singly_linked_mode, @doubly_linked_mode] do
       throw({:error, {:unknown_mode, mode}})
@@ -29,9 +34,11 @@ defmodule InPlace.LinkedList do
     %{
       capacity: size,
       ## mode (:singly_linked or :doubly_linked)
-      mode: Keyword.get(opts, :mode),
+      mode: mode,
       ## circular?
-      circular: Keyword.get(opts, :circular),
+      circular: circular?,
+      ## Option to "undo" removals; see restore/1
+      undo: undo?,
       ## holds the pointer to the first element of the list
       handle: init_handle(mode),
       # pointers (links) to the next element
@@ -50,6 +57,14 @@ defmodule InPlace.LinkedList do
         state
       end
     end)
+    |> then(fn state ->
+      if undo? do
+        Map.put(state, :removed, Stack.new(size))
+      else
+        state
+      end
+    end)
+
   end
 
   def get(list, idx) when is_integer(idx) and idx > 0 do
@@ -148,17 +163,18 @@ defmodule InPlace.LinkedList do
       # Removing first element of the list
       if idx == 1 do
         current_head = head(list)
-        deallocate(list, current_head)
+        delete_pointer(list, current_head)
         next_head = next_pointer(list, current_head)
         set_head(list, next_head)
 
         if mode == @doubly_linked_mode && next_head != @terminator do
           set_previous(list, next_head, @terminator)
         end
+        {:removed, current_head}
       else
         pointer = get_pointer(list, idx - 1)
         pointer_to_delete = next_pointer(list, pointer)
-        deallocate(list, pointer_to_delete)
+        delete_pointer(list, pointer_to_delete)
         pointer_next = next_pointer(list, pointer_to_delete)
         set_next(list, pointer, pointer_next)
 
@@ -170,8 +186,8 @@ defmodule InPlace.LinkedList do
             set_previous(list, pointer_next, pointer)
           end
         end
+        {:removed, pointer_to_delete}
       end
-      :ok
     end
   end
 
@@ -209,14 +225,15 @@ defmodule InPlace.LinkedList do
     head(list) == @terminator
   end
 
-  def size(%{capacity: capacity, free: free} = _list) do
-    capacity - Stack.size(free)
+  def size(%{undo: undo?, capacity: capacity, free: free} = list) do
+    capacity - Stack.size(free) - (undo? && Stack.size(list.removed) || 0)
   end
 
   def default_opts() do
     [
       mode: @singly_linked_mode,
       circular: false,
+      undo: false,
       mapper_fun: &Function.identity/1
     ]
   end
@@ -244,7 +261,7 @@ defmodule InPlace.LinkedList do
 
   ## The stack for tracking 'free' indices
   ## They can be reused after the element is removed from linked list
-  ##
+  ## (unless `undo=true`, which disables reuse).
   defp init_free(size) when is_integer(size) do
     ref = Stack.new(size)
     Enum.each(1..size, fn idx -> Stack.push(ref, idx) end)
@@ -341,15 +358,15 @@ defmodule InPlace.LinkedList do
   ## so we can treat internal structure uniformly.
   ## The navigation over circular lists is implemented by next/2 and prev/2.
   ##
-  defp next_pointer(%{next: pointers} = _list, pointer) do
+  def next_pointer(%{next: pointers} = _list, pointer) do
     Array.get(pointers, pointer)
   end
 
-  defp prev_pointer(%{prev: pointers} =  _list, pointer) do
+  def prev_pointer(%{prev: pointers} =  _list, pointer) do
     Array.get(pointers, pointer)
   end
 
-  defp prev_pointer(_singly_linked, _pointer) do
+  def prev_pointer(_singly_linked, _pointer) do
     nil
   end
 
@@ -357,7 +374,55 @@ defmodule InPlace.LinkedList do
     Stack.pop(free) || throw(:list_over_capacity)
   end
 
-  def deallocate(%{free: free} = _list, pointer) when is_integer(pointer) and pointer > 0 do
+  ## If `undo` is disabled, reclaim the space for removed element
+  def delete_pointer(%{undo: false} = list, pointer) when is_integer(pointer) and pointer > 0 do
+    forget_pointer(list, pointer)
+  end
+
+  ## If `undo` is enabled, record the pointer to removed element.
+  ## Could be restored later for circular doubly linked list
+  ## See `restore/1
+  ##
+  def delete_pointer(%{undo: true} = list, pointer) when is_integer(pointer) and pointer > 0 do
+    hide_pointer(list, pointer)
+  end
+
+  defp forget_pointer(%{free: free} = _list, pointer) do
     Stack.push(free, pointer)
   end
+
+  defp hide_pointer(%{removed: removed} = _list, pointer) do
+   Stack.push(removed, pointer)
+  end
+
+  def num_free_pointers(%{free: free} = _list) do
+    Stack.size(free)
+  end
+
+  def restore(%{undo: true, removed: removed} = list) do
+    case Stack.pop(removed) do
+      nil -> false
+      restored_pointer ->
+        restore_pointer(list, restored_pointer)
+      end
+  end
+
+  def restore(_list) do
+    false
+  end
+
+  defp restore_pointer(list, pointer) do
+    next_pointer = next_pointer(list, pointer)
+    ## Special case: next_pointer for restored pointer
+    ## is a current head
+    if next_pointer == head(list) do
+      ## We replace head with the restored pointer
+      set_head(list, pointer)
+    else
+      prev_pointer = prev(list, pointer)
+      set_next(list, prev_pointer, pointer)
+    end
+    set_previous(list, next_pointer, pointer)
+  end
+
 end
