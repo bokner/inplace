@@ -43,14 +43,6 @@ defmodule InPlace.PriorityQueue do
   end
 
   def insert(%{heap: heap, mapping: mapping, opts: opts} = p_queue, key, priority) when is_integer(key) and is_number(priority) do
-    # current_priority = get_priority(getter_fun, key)
-    # if !current_priority || !Keyword.get(opts, :comparator).(current_priority, priority) do
-    #   ## We insert if no key yet, or if the new priority for the same key is
-    #   ## 'lesser' than the current
-    #   insert_new(p_queue, key, priority)
-    # else
-    #   :noop
-    # end
     case get_mapping(mapping, key) do
       nil ->
         insert_new(p_queue, key, priority)
@@ -69,7 +61,11 @@ defmodule InPlace.PriorityQueue do
   end
 
   def get_min(%{heap: heap} = _p_queue) do
-    Heap.get_min(heap)
+    case Heap.get_min(heap) do
+      nil -> nil
+      {key, priority, _key_index} ->
+        {key, priority}
+      end
   end
 
   def extract_min(%{mapping: mapping, heap: heap} = _p_queue) do
