@@ -71,20 +71,22 @@ defmodule InPlace.PriorityQueue do
   def extract_min(%{mapping: mapping, heap: heap} = _p_queue) do
     case Heap.extract_min(heap) do
       nil -> nil
-      {key, priority, _key_index} = h_min ->
-        extract_duplicates(heap, h_min)
+      {key, priority, _key_index} = _h_min ->
+        extract_duplicates(heap, {key, priority})
         extract_mapping(mapping, key)
         {key, priority}
     end
   end
 
-  defp extract_duplicates(heap, h_min) do
+  defp extract_duplicates(heap, {key, priority} = h_min) do
     ## duplicate keys, if any, will take the place of
-    ## previously extracted "min" key
+    ## previously extracted keys with the same priority.
     ## So we keep extracting until we see a "lesser" key
-    if Heap.get_min(heap) == h_min do
-      Heap.extract_min(heap)
-      extract_duplicates(heap, h_min)
+    case Heap.get_min(heap) do
+      {k, p, _key_index} when k == key and p == priority ->
+        Heap.extract_min(heap)
+        extract_duplicates(heap, h_min)
+      _not_a_duplicate -> :ok
     end
   end
 
@@ -127,7 +129,11 @@ defmodule InPlace.PriorityQueue do
     compare_fun.(priority1, priority2)
   end
 
-  defp get_priority(getter_fun, key) do
+  def get_priority(%{heap: %{getter: getter}} = p_queue, key) do
+    get_priority(getter, key)
+  end
+
+  def get_priority(getter_fun, key) do
     case getter_fun.(key) do
       nil -> nil
       {_key, priority, _key_index} -> priority
