@@ -129,7 +129,7 @@ defmodule InPlace.PriorityQueue do
     compare_fun.(priority1, priority2)
   end
 
-  def get_priority(%{heap: %{getter: getter}} = p_queue, key) do
+  def get_priority(%{heap: %{getter: getter}} = _p_queue, key) do
     get_priority(getter, key)
   end
 

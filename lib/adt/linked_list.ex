@@ -74,12 +74,8 @@ defmodule InPlace.LinkedList do
     end
   end
 
-  def get_pointer(list, idx) when is_integer(idx) and idx > 0 do
+  def get_pointer(list, idx) when is_integer(idx) and idx > 0  do
     get_pointer(list, head(list), 0, idx)
-  end
-
-  defp get_pointer(_list, @terminator, _step, _idx) do
-    nil
   end
 
   defp get_pointer(_list, pointer, step, idx) when step == idx - 1 do
@@ -325,10 +321,6 @@ defmodule InPlace.LinkedList do
     mapper.(Array.get(refs, pointer))
   end
 
-  def next(_list, @terminator) do
-    nil
-  end
-
   def next(%{circular: circular?} = list, pointer) do
     case next_pointer(list, pointer) do
       @terminator when circular? ->
@@ -336,10 +328,6 @@ defmodule InPlace.LinkedList do
       next_pointer ->
         next_pointer
       end
-  end
-
-  def prev(_list, @terminator) do
-    nil
   end
 
   def prev(%{circular: circular?} = list, pointer) do
@@ -358,24 +346,24 @@ defmodule InPlace.LinkedList do
   ## so we can treat internal structure uniformly.
   ## The navigation over circular lists is implemented by next/2 and prev/2.
   ##
-  def next_pointer(%{next: pointers} = _list, pointer) do
+  defp next_pointer(%{next: pointers} = _list, pointer) do
     Array.get(pointers, pointer)
   end
 
-  def prev_pointer(%{prev: pointers} =  _list, pointer) do
+  defp prev_pointer(%{prev: pointers} =  _list, pointer) do
     Array.get(pointers, pointer)
   end
 
-  def prev_pointer(_singly_linked, _pointer) do
+  defp prev_pointer(_singly_linked, _pointer) do
     nil
   end
 
-  def allocate(%{free: free} = _list) do
+  defp allocate(%{free: free} = _list) do
     Stack.pop(free) || throw(:list_over_capacity)
   end
 
   ## If `undo` is disabled, reclaim the space for removed element
-  def delete_pointer(%{undo: false} = list, pointer) when is_integer(pointer) and pointer > 0 do
+  defp delete_pointer(%{undo: false} = list, pointer) when is_integer(pointer) and pointer > 0 do
     forget_pointer(list, pointer)
   end
 
@@ -383,7 +371,7 @@ defmodule InPlace.LinkedList do
   ## Could be restored later for circular doubly linked list
   ## See `restore/1
   ##
-  def delete_pointer(%{undo: true} = list, pointer) when is_integer(pointer) and pointer > 0 do
+  defp delete_pointer(%{undo: true} = list, pointer) when is_integer(pointer) and pointer > 0 do
     hide_pointer(list, pointer)
   end
 
