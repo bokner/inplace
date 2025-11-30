@@ -160,30 +160,52 @@ defmodule InPlace.LinkedList do
       if idx == 1 do
         current_head = head(list)
         delete_pointer(list, current_head)
-        next_head = next_pointer(list, current_head)
+
+        {:removed, current_head}
+      else
+        pointer = get_pointer(list, idx - 1)
+        pointer_to_delete = next_pointer(list, pointer)
+        pointer_next = next_pointer(list, pointer_to_delete)
+        set_next(list, pointer, pointer_next)
+
+        #if mode == @doubly_linked_mode do
+        delete_pointer(list, pointer_to_delete)
+          # if pointer_to_delete == tail(list) do
+          #   ## Last element
+          #   set_tail(list, pointer)
+          # else
+          #   set_previous(list, pointer_next, pointer)
+          # end
+        #end
+        {:removed, pointer_to_delete}
+      end
+    end
+  end
+
+  def delete_pointer(%{mode: mode} = list, pointer) do
+    forget_or_hide(list, pointer)
+
+    cond do
+      pointer == head(list) ->
+        next_head = next_pointer(list, pointer)
         set_head(list, next_head)
 
         if mode == @doubly_linked_mode && next_head != @terminator do
           set_previous(list, next_head, @terminator)
         end
-        {:removed, current_head}
-      else
-        pointer = get_pointer(list, idx - 1)
-        pointer_to_delete = next_pointer(list, pointer)
-        delete_pointer(list, pointer_to_delete)
-        pointer_next = next_pointer(list, pointer_to_delete)
-        set_next(list, pointer, pointer_next)
 
-        if mode == @doubly_linked_mode do
-          if pointer_to_delete == tail(list) do
+      mode == @doubly_linked_mode ->
+        next_pointer = next_pointer(list, pointer)
+        if pointer == tail(list) do
             ## Last element
-            set_tail(list, pointer)
-          else
-            set_previous(list, pointer_next, pointer)
-          end
+          new_tail = prev(list, pointer)
+          set_tail(list, new_tail)
+          set_next(list, new_tail, @terminator)
         end
-        {:removed, pointer_to_delete}
-      end
+        set_previous(list, next_pointer, prev(list, pointer))
+
+      true ->
+        :ok
     end
   end
 
@@ -362,17 +384,16 @@ defmodule InPlace.LinkedList do
     Stack.pop(free) || throw(:list_over_capacity)
   end
 
-  ## If `undo` is disabled, reclaim the space for removed element
-  defp delete_pointer(%{undo: false} = list, pointer) when is_integer(pointer) and pointer > 0 do
-    forget_pointer(list, pointer)
-  end
-
   ## If `undo` is enabled, record the pointer to removed element.
   ## Could be restored later for circular doubly linked list
   ## See `restore/1
   ##
-  defp delete_pointer(%{undo: true} = list, pointer) when is_integer(pointer) and pointer > 0 do
-    hide_pointer(list, pointer)
+  defp forget_or_hide(%{undo: undo?} = list, pointer) when is_integer(pointer) and pointer > 0 do
+    if undo? do
+      hide_pointer(list, pointer)
+    else
+      forget_pointer(list, pointer)
+    end
   end
 
   defp forget_pointer(%{free: free} = _list, pointer) do

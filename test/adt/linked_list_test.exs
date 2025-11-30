@@ -108,6 +108,25 @@ defmodule InPlace.LinkedListTest do
       end
     end
 
+    test "delete pointers" do
+      dllc = LinkedList.new(10, mode: :doubly_linked)
+      Enum.each(1..4, fn value -> LinkedList.add_last(dllc, value) end)
+      assert [1, 2, 3, 4] == LinkedList.to_list(dllc)
+      head = LinkedList.head(dllc)
+      LinkedList.delete_pointer(dllc, head)
+      assert [2, 3, 4] == LinkedList.to_list(dllc)
+      tail = LinkedList.tail(dllc)
+      LinkedList.delete_pointer(dllc, tail)
+      assert LinkedList.prev(dllc, tail) == LinkedList.tail(dllc)
+      assert [2, 3] == LinkedList.to_list(dllc)
+      tail = LinkedList.tail(dllc)
+      LinkedList.delete_pointer(dllc, tail)
+      assert [2] == LinkedList.to_list(dllc)
+      tail = LinkedList.tail(dllc)
+      LinkedList.delete_pointer(dllc, tail)
+      assert LinkedList.empty?(dllc)
+    end
+
     test "restore pointers" do
       dllc = LinkedList.new(10, circular: true, mode: :doubly_linked, undo: true)
       n = 4
