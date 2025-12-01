@@ -62,8 +62,8 @@ defmodule InPlace.ExactCover do
     %{
       directory: item_directory,
       header: item_header,
-      item_options: item_options,
-      option_items: option_items |> Enum.with_index(1) |> Map.new(fn {option, idx} -> {idx, option} end)
+      item_columns: item_options,
+      option_rows: option_items |> Enum.with_index(1) |> Map.new(fn {option, idx} -> {idx, option} end)
     }
   end
 
@@ -73,7 +73,10 @@ defmodule InPlace.ExactCover do
   ## and we also delete `i`
   ## from the list of items that need to be covered.
   ##
-  def cover(i, data) do
+  def cover(i, %{header: header, item_columns: item_columns, option_rows: option_rows} = _data) do
+    ## Get an item column i
+    item_column = Map.get(item_columns, i)
+    
   end
 
   def uncover(i, data) do
