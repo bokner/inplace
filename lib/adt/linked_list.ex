@@ -152,7 +152,7 @@ defmodule InPlace.LinkedList do
     end
   end
 
-  def delete(%{mode: mode} = list, idx) when is_integer(idx) and idx > 0 do
+  def delete(list, idx) when is_integer(idx) and idx > 0 do
     if idx > size(list) do
       {:error, {:no_index, idx}}
     else
@@ -167,19 +167,15 @@ defmodule InPlace.LinkedList do
         pointer_to_delete = next_pointer(list, pointer)
         pointer_next = next_pointer(list, pointer_to_delete)
         set_next(list, pointer, pointer_next)
-
-        #if mode == @doubly_linked_mode do
         delete_pointer(list, pointer_to_delete)
-          # if pointer_to_delete == tail(list) do
-          #   ## Last element
-          #   set_tail(list, pointer)
-          # else
-          #   set_previous(list, pointer_next, pointer)
-          # end
-        #end
+
         {:removed, pointer_to_delete}
       end
     end
+  end
+
+  def delete_pointer(_list, @terminator) do
+    :ok
   end
 
   def delete_pointer(%{mode: mode} = list, pointer) do
@@ -221,22 +217,83 @@ defmodule InPlace.LinkedList do
     to_list(list, next_pointer(list, pointer), [data(list, pointer) | acc])
   end
 
-  ## Reduce over the list
   def reduce(list, initial_value, reducer \\ nil) do
-    reduce_impl(list, head(list), initial_value, reducer ||
-      (fn p, acc ->
-        [data(list, p) | acc]
-      end)
-    )
+    iterate(list, action: (reducer || default_reducer(list)), initial_value: initial_value)
   end
 
-  defp reduce_impl(list, pointer, acc, reducer) when is_function(reducer, 2) do
-    if pointer == @terminator do
-      acc
-    else
-      next = next_pointer(list, pointer)
-      reduce_impl(list, next, reducer.(pointer, acc), reducer)
+  defp default_reducer(list) do
+    (fn p, acc ->
+        [data(list, p) | acc]
+    end)
+  end
+
+  def iterate(list, opts \\ [])
+
+  def iterate(list, opts) do
+    start = Keyword.get(opts, :start, head(list))
+    action = Keyword.get(opts, :action, default_reducer(list))
+    stop = list.circular && start || @terminator
+
+    ## If action is of arity 1, it's a "side-effect" function.
+    ## The argument is a pointer.
+    ## For instance, it might conditionally delete some entries,
+    ## etc.
+    ## The result of the action call would be ignored.
+    ## If action is of arity 2, it's a "reducer" function
+    ## The arguments are : pointer and accumulated value
+    ## If {:halt, term()} is returned, the iteration is halted with term()
+    ## If {:cont, term()} or term() is returned, the iteration continues.
+    ##
+    cond do
+      is_function(action, 1) ->
+        iterate_impl(list, start, stop, action)
+      is_function(action, 2) ->
+        iterate_impl(list, start, stop, action, Keyword.get(opts, :initial_value))
+      true ->
+        throw({:error, :action_invalid_arity})
     end
+  end
+
+  ## Iteration with side-effects
+  defp iterate_impl(_list, @terminator, _stop, action) when is_function(action, 1) do
+    :ok
+  end
+
+  defp iterate_impl(list, current_pointer, stop, action) when is_function(action, 1) do
+    action.(current_pointer)
+
+    case next(list, current_pointer) do
+      next_p when next_p == stop ->
+        :ok
+      next_p ->
+        iterate_impl(list, next_p, stop, action)
+      end
+
+  end
+
+  ## "Reducer" iteration
+  defp iterate_impl(_list, @terminator, _stop, action, acc) when is_function(action, 2) do
+    acc
+  end
+
+  defp iterate_impl(list, current_pointer, stop, action, acc) when is_function(action, 2) do
+    case action.(current_pointer, acc) do
+      {:halt, new_acc} ->
+        new_acc
+      result ->
+        new_acc = case result do
+            {:cont, r} ->
+              r
+            r -> r
+          end
+          case next(list, current_pointer) do
+            next_p when next_p == stop ->
+              new_acc
+            next_p ->
+              iterate_impl(list, next_p, stop, action, new_acc)
+            end
+        end
+
   end
 
   def empty?(list) do
