@@ -303,7 +303,7 @@ defmodule InPlace.LinkedList do
 
   def default_opts() do
     [
-      mode: @singly_linked_mode,
+      mode: @doubly_linked_mode,
       circular: false,
       undo: false,
       mapper_fun: &Function.identity/1
