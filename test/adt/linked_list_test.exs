@@ -43,12 +43,26 @@ defmodule InPlace.LinkedListTest do
       assert LinkedList.reduce(ll, 0, reducer_fun) == LinkedList.to_list(ll) |> Enum.sum()
     end
 
-    test "iterator" do
-      ll = LinkedList.new(10, circular: true, undo: true, mode: :doubly_linked)
+    test "iterator (side effects)" do
+      ll = LinkedList.new(10, circular: true, mode: :doubly_linked)
       Enum.each(1..10, fn value -> LinkedList.add_last(ll, value) end)
       assert LinkedList.size(ll) == 10
       LinkedList.iterate(ll, action: fn p -> LinkedList.delete_pointer(ll, p)  end)
       assert LinkedList.size(ll) == 0
+      assert Enum.empty?(LinkedList.to_list(ll))
+    end
+
+    test "iterator (reduction)" do
+      ll = LinkedList.new(10, circular: true, mode: :doubly_linked)
+      Enum.each(1..10, fn value -> LinkedList.add_last(ll, value) end)
+      ## Start from head
+      from_head_list = LinkedList.iterate(ll, initial_value: [], action: fn p, acc -> [LinkedList.data(ll, p) | acc]  end)
+      assert from_head_list == Enum.to_list(10..1//-1)
+      ## Start from tail
+      from_tail_list =
+        LinkedList.iterate(ll, start: LinkedList.tail(ll), initial_value: [], action: fn p, acc -> [LinkedList.data(ll, p) | acc]  end)
+      assert from_tail_list == Enum.to_list(9..1//-1) ++ [10]
+
     end
 
     test "recycling of indices" do
