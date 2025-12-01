@@ -196,9 +196,10 @@ defmodule InPlace.LinkedList do
             ## Last element
           new_tail = prev(list, pointer)
           set_tail(list, new_tail)
-          set_next(list, new_tail, @terminator)
         end
-        set_previous(list, next_pointer, prev(list, pointer))
+        prev_pointer = prev(list, pointer)
+        set_next(list, prev_pointer, next_pointer)
+        set_previous(list, next_pointer, prev_pointer)
 
       true ->
         :ok
@@ -206,15 +207,7 @@ defmodule InPlace.LinkedList do
   end
 
   def to_list(list) do
-    to_list(list, head(list), [])
-  end
-
-  defp to_list(_list, @terminator, acc) do
-    Enum.reverse(acc)
-  end
-
-  defp to_list(list, pointer, acc) do
-    to_list(list, next_pointer(list, pointer), [data(list, pointer) | acc])
+    reduce(list, []) |> Enum.reverse()
   end
 
   def reduce(list, initial_value, reducer \\ nil) do
@@ -232,7 +225,10 @@ defmodule InPlace.LinkedList do
   def iterate(list, opts) do
     start = Keyword.get(opts, :start, head(list))
     action = Keyword.get(opts, :action, default_reducer(list))
-    stop = list.circular && start || @terminator
+    stop_on = Keyword.get(opts, :stop_on, fn next ->
+      last_pointer = list.circular && start || @terminator
+      next == last_pointer
+    end)
 
     ## If action is of arity 1, it's a "side-effect" function.
     ## The argument is a pointer.
@@ -246,37 +242,37 @@ defmodule InPlace.LinkedList do
     ##
     cond do
       is_function(action, 1) ->
-        iterate_impl(list, start, stop, action)
+        iterate_impl(list, start, stop_on, action)
       is_function(action, 2) ->
-        iterate_impl(list, start, stop, action, Keyword.get(opts, :initial_value))
+        iterate_impl(list, start, stop_on, action, Keyword.get(opts, :initial_value))
       true ->
         throw({:error, :action_invalid_arity})
     end
   end
 
   ## Iteration with side-effects
-  defp iterate_impl(_list, @terminator, _stop, action) when is_function(action, 1) do
+  defp iterate_impl(_list, @terminator, _stop_on, action) when is_function(action, 1) do
     :ok
   end
 
-  defp iterate_impl(list, current_pointer, stop, action) when is_function(action, 1) do
+  defp iterate_impl(list, current_pointer, stop_on, action) when is_function(action, 1) do
     action.(current_pointer)
 
-    case next(list, current_pointer) do
-      next_p when next_p == stop ->
-        :ok
-      next_p ->
-        iterate_impl(list, next_p, stop, action)
-      end
+    next_p = next(list, current_pointer)
+    if stop_on.(next_p) do
+      :ok
+    else
+      iterate_impl(list, next_p, stop_on, action)
+    end
 
   end
 
   ## "Reducer" iteration
-  defp iterate_impl(_list, @terminator, _stop, action, acc) when is_function(action, 2) do
+  defp iterate_impl(_list, @terminator, _stop_on, action, acc) when is_function(action, 2) do
     acc
   end
 
-  defp iterate_impl(list, current_pointer, stop, action, acc) when is_function(action, 2) do
+  defp iterate_impl(list, current_pointer, stop_on, action, acc) when is_function(action, 2) do
     case action.(current_pointer, acc) do
       {:halt, new_acc} ->
         new_acc
@@ -286,12 +282,13 @@ defmodule InPlace.LinkedList do
               r
             r -> r
           end
-          case next(list, current_pointer) do
-            next_p when next_p == stop ->
+          next_p = next(list, current_pointer)
+
+          if stop_on.(next_p) do
               new_acc
-            next_p ->
-              iterate_impl(list, next_p, stop, action, new_acc)
-            end
+          else
+            iterate_impl(list, next_p, stop_on, action, new_acc)
+          end
         end
 
   end
@@ -306,7 +303,7 @@ defmodule InPlace.LinkedList do
 
   def default_opts() do
     [
-      mode: @singly_linked_mode,
+      mode: @doubly_linked_mode,
       circular: false,
       undo: false,
       mapper_fun: &Function.identity/1
