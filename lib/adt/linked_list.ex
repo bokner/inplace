@@ -21,7 +21,15 @@ defmodule InPlace.LinkedList do
   @singly_linked_mode :singly_linked
   @doubly_linked_mode :doubly_linked
 
-  def new(size, opts \\ []) when is_integer(size) and size > 0 do
+  def new(values_or_size, opts \\ [])
+
+  def new(values, opts) when is_list(values) do
+    new(max(length(values), Keyword.get(opts, :capacity, 0)))
+    |> tap(fn ll -> Enum.each(values, fn v -> add_last(ll, v) end) end)
+  end
+
+
+  def new(size, opts) when is_integer(size) and size > 0 do
     opts = Keyword.merge(default_opts(), opts)
     mode = Keyword.get(opts, :mode)
     circular? = Keyword.get(opts, :circular)
@@ -65,6 +73,54 @@ defmodule InPlace.LinkedList do
       end
     end)
 
+  end
+
+  @doc """
+  This will create a circuit out of the list of pointers.
+
+  !!!!! Hazard warning !!!!!
+  If you want to avoid infinite loops
+  while iterating over the list that contains circuits,
+  make sure that you start the iteration within the circuit
+  (using :start option fir iterate/2).
+
+  For instance
+  ```elixir
+  import InPlace.LinkedList
+  ll = new(Enum.to_list(1..10))
+  circuit(ll, [2, 4, 6])
+  iterate, start: 1, action: fn p -> IO.inspect(p) end
+  ```
+  will loop indefinitely, as the iteration will be trapped in `2 -> 4 -> 6` circuit
+  once entering it from `1` pointer.
+  """
+  def circuit(_list, []) do
+    :ok
+  end
+
+  def circuit(list, [single]) do
+    wire(list, single, single)
+  end
+
+  def circuit(list, [first, second | rest] = _pointers) do
+    wire(list, first, second)
+    last = circuit_impl(list, second, rest)
+    ## Short the circuit
+    wire(list, last, first)
+  end
+
+  defp circuit_impl(_list, last, []) do
+    last
+  end
+
+  defp circuit_impl(list, current, [next | rest]) do
+    wire(list, current, next)
+    circuit_impl(list, next, rest)
+  end
+
+  defp wire(list, first, second) do
+    set_next(list, first, second)
+    set_previous(list, second, first)
   end
 
   def get(list, idx) when is_integer(idx) and idx > 0 do
@@ -256,15 +312,16 @@ defmodule InPlace.LinkedList do
   end
 
   defp iterate_impl(list, current_pointer, stop_on, action) when is_function(action, 1) do
-    action.(current_pointer)
-
-    next_p = next(list, current_pointer)
-    if stop_on.(next_p) do
-      :ok
-    else
-      iterate_impl(list, next_p, stop_on, action)
-    end
-
+    case action.(current_pointer) do
+      :halt -> :ok
+      _ ->
+        next_p = next(list, current_pointer)
+        if stop_on.(next_p) do
+          :ok
+        else
+          iterate_impl(list, next_p, stop_on, action)
+        end
+      end
   end
 
   ## "Reducer" iteration
@@ -304,7 +361,7 @@ defmodule InPlace.LinkedList do
   def default_opts() do
     [
       mode: @doubly_linked_mode,
-      circular: false,
+      circular: true,
       undo: false,
       mapper_fun: &Function.identity/1
     ]
