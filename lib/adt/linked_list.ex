@@ -24,7 +24,7 @@ defmodule InPlace.LinkedList do
   def new(values_or_size, opts \\ [])
 
   def new(values, opts) when is_list(values) do
-    new(max(length(values), Keyword.get(opts, :capacity, 0)))
+    new(max(length(values), Keyword.get(opts, :capacity, 0)), opts)
     |> tap(fn ll -> Enum.each(values, fn v -> add_last(ll, v) end) end)
   end
 

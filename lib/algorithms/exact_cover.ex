@@ -48,17 +48,17 @@ defmodule InPlace.ExactCover do
       LinkedList.new(entries, undo: true)
       |> tap(fn ll ->
         Enum.each(item_lists, fn options ->
-          LinkedList.circuit(ll, options)
+          LinkedList.circuit(ll, Enum.reverse(options))
         end)
       end)
 
+    ## NOTE: we won't have to cover/uncover options, hence no "undoing" it
     option_lists_ll =
-      ## NOTE: we won't have to cover/uncover options, hence no "undoing" it
       LinkedList.new(entries, undo: false)
       |> tap(fn ll ->
         Enum.each(
           option_lists,
-          fn items -> LinkedList.circuit(ll, items) end
+          fn items -> LinkedList.circuit(ll, Enum.reverse(items)) end
         )
       end)
 
@@ -68,5 +68,37 @@ defmodule InPlace.ExactCover do
       item_lists: item_lists_ll,
       option_lists: option_lists_ll
     }
+  end
+
+  def cover(item, %{
+        item_header: item_header,
+        item_lists: item_lists,
+        option_lists: option_lists
+      })
+      when is_integer(item) and item > 0 do
+    # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
+    LinkedList.delete_pointer(item_header, item)
+    #   For each i ← D[c], D[D[c]] , . . . , while i != c,
+    LinkedList.iterate(item_lists,
+      start: item,
+      action: fn i ->
+        if i != item do
+          #     for each j ← R[i], R[R[i]] , . . . , while j != i,
+          LinkedList.iterate(option_lists,
+            start: i,
+            action: fn j ->
+              #       set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
+              if i != j do
+                LinkedList.delete_pointer(item_lists, j)
+              end
+            end
+          )
+
+          #       and set S[C[j]]  ← S[C[j]]  − 1
+          ## TODO: this is for tracking list sizes; important for branching
+          ## , but we'll leave it out for now.
+        end
+      end
+    )
   end
 end
