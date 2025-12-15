@@ -280,7 +280,9 @@ defmodule InPlace.LinkedList do
 
   def iterate(list, opts) do
     start = Keyword.get(opts, :start, head(list))
+    forward? = Keyword.get(opts, :forward, true)
     action = Keyword.get(opts, :action, default_reducer(list))
+    initial_value = Keyword.get(opts, :initial_value, [])
     stop_on = Keyword.get(opts, :stop_on, fn next ->
       last_pointer = list.circular && start || @terminator
       next == last_pointer
@@ -298,38 +300,38 @@ defmodule InPlace.LinkedList do
     ##
     cond do
       is_function(action, 1) ->
-        iterate_impl(list, start, stop_on, action)
+        iterate_impl(list, start, stop_on, action, forward?)
       is_function(action, 2) ->
-        iterate_impl(list, start, stop_on, action, Keyword.get(opts, :initial_value))
+        iterate_impl(list, start, stop_on, action, forward?, initial_value)
       true ->
         throw({:error, :action_invalid_arity})
     end
   end
 
   ## Iteration with side-effects
-  defp iterate_impl(_list, @terminator, _stop_on, action) when is_function(action, 1) do
+  defp iterate_impl(_list, @terminator, _stop_on, action, _forward?) when is_function(action, 1) do
     :ok
   end
 
-  defp iterate_impl(list, current_pointer, stop_on, action) when is_function(action, 1) do
+  defp iterate_impl(list, current_pointer, stop_on, action, forward?) when is_function(action, 1) do
     case action.(current_pointer) do
       :halt -> :ok
       _ ->
-        next_p = next(list, current_pointer)
+        next_p = forward? && next(list, current_pointer) || prev(list, current_pointer)
         if stop_on.(next_p) do
           :ok
         else
-          iterate_impl(list, next_p, stop_on, action)
+          iterate_impl(list, next_p, stop_on, action, forward?)
         end
       end
   end
 
   ## "Reducer" iteration
-  defp iterate_impl(_list, @terminator, _stop_on, action, acc) when is_function(action, 2) do
+  defp iterate_impl(_list, @terminator, _stop_on, action, _forward?, acc) when is_function(action, 2) do
     acc
   end
 
-  defp iterate_impl(list, current_pointer, stop_on, action, acc) when is_function(action, 2) do
+  defp iterate_impl(list, current_pointer, stop_on, action, forward?, acc) when is_function(action, 2) do
     case action.(current_pointer, acc) do
       {:halt, new_acc} ->
         new_acc
@@ -339,12 +341,12 @@ defmodule InPlace.LinkedList do
               r
             r -> r
           end
-          next_p = next(list, current_pointer)
+          next_p = forward? && next(list, current_pointer) || prev(list, current_pointer)
 
           if stop_on.(next_p) do
               new_acc
           else
-            iterate_impl(list, next_p, stop_on, action, new_acc)
+            iterate_impl(list, next_p, stop_on, action, forward?, new_acc)
           end
         end
 
@@ -499,12 +501,16 @@ defmodule InPlace.LinkedList do
   ## Could be restored later for circular doubly linked list
   ## See `restore/1
   ##
+
   defp forget_or_hide(%{undo: undo?} = list, pointer) when is_integer(pointer) and pointer > 0 do
-    if undo? do
-      hide_pointer(list, pointer)
-    else
-      forget_pointer(list, pointer)
-    end
+    cond do
+      is_nil(undo?) ->
+        :ok
+      undo? ->
+        hide_pointer(list, pointer)
+      true ->
+        forget_pointer(list, pointer)
+      end
   end
 
   defp forget_pointer(%{free: free} = _list, pointer) do
@@ -531,7 +537,7 @@ defmodule InPlace.LinkedList do
     false
   end
 
-  defp restore_pointer(list, pointer) do
+  def restore_pointer(list, pointer) do
     next_pointer = next_pointer(list, pointer)
     ## Special case: next_pointer for restored pointer
     ## is a current head

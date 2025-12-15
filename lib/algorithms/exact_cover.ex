@@ -59,11 +59,11 @@ defmodule InPlace.ExactCover do
           ## a (17, 1, 8) circuit.
           header_idx + entry_count
         end),
-        undo: true
+        undo: nil
       )
 
     item_lists_ll =
-      LinkedList.new(Enum.to_list(1..(entry_count + num_items)), undo: true)
+      LinkedList.new(Enum.to_list(1..(entry_count + num_items)), undo: nil)
       |> tap(fn ll ->
         item_lists
         |> Enum.zip((entry_count + 1)..(entry_count + num_items))
@@ -115,12 +115,12 @@ defmodule InPlace.ExactCover do
         k,
         %{
           item_header: item_header,
-          item_lists: item_lists,
+          top: top,
           solution: solution
         } = data,
         choose_column_fun \\ fn _step, data -> choose_column(data) end
       ) do
-    IO.inspect("Search #{k}")
+    IO.inspect("Search #{k} started")
     # If R[h] = h, print the current solution and return.
     if LinkedList.empty?(item_header) do
       solution(data)
@@ -128,29 +128,47 @@ defmodule InPlace.ExactCover do
       # Otherwise choose a column object c (see below).
       c = choose_column_fun.(k, data)
       # Cover column c.
-      updated_columns = cover(c, data)
-      ## ...and all columns that have elements removed
-      ## by covering column `c`
-      Enum.each(updated_columns, fn item -> cover(item, data) end)
-
+      num_removed_entries = cover(c, data)
       # For each r ← D[c], D[D[c]], . . . , while r != c,
-      top = LinkedList.data(item_header, c)
-
-      LinkedList.iterate(item_lists,
-        start: LinkedList.next(item_lists, top),
-        action: fn r ->
-          if r == top do
-            :halt
-          else
+      iterate_column(c, nil, fn r, _acc ->
             #   set O[k] ← r;
+            IO.inspect("r = #{r}")
             Array.put(solution, k, r)
-          end
-        end
+            IO.inspect("O[#{k}] <- #{r}")
+            #for each j ← R[r], R[R[r]], . . . , while j != r,
+            #  cover column j
+            {num_covered_columns, num_removed_entries} =
+              iterate_row(r, {0, 0}, fn j, {columns_acc, entries_acc} = acc ->
+              if j != r do
+              # Tricky; cover/2 expects header (not item) pointer,
+              # so we need to convert
+              IO.inspect("j = #{j}")
+              {columns_acc + 1,
+              Map.get(top, j)
+              |> cover(data)
+              |> Kernel.+(entries_acc)
+              }
+              else
+                acc
+              end
+            end, data)
+            search(k+1, data, choose_column_fun)
+            # for each j ← L[r], L[L[r]], . . . , while j != r,
+            #  uncover column j (see below).
+            #r = Array.get(solution, k)
+
+            iterate_row(r, nil, fn j, _acc ->
+              if j != r do
+                uncover(Map.get(top, j), data)
+              end
+            end, data, false)
+          end,
+        data
       )
 
-      # Uncover column c (see below) and return.
-
-      # search(step, data)
+      # Uncover column c and return.
+      uncover(c, data)
+      IO.inspect("Search #{k} completed")
     end
   end
 
@@ -171,7 +189,7 @@ defmodule InPlace.ExactCover do
     IO.inspect("solved")
   end
 
-  ## `item_pointer` is a pointer to
+  ## `column_pointer` is a pointer to
   ## an entry in "item header" list.
   ## This entry, in turn, contains the pointer to
   ## a head of a sublist in item_lists,
@@ -179,34 +197,41 @@ defmodule InPlace.ExactCover do
   ## associated with the item.
   ##
   def cover(
-        item_pointer,
+        column_pointer,
         %{
           item_header: item_header,
           top: top,
           item_lists: item_lists
         } = data
       )
-      when is_integer(item_pointer) and item_pointer > 0 do
+      when is_integer(column_pointer) and column_pointer > 0 do
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
-    IO.inspect("Covering #{get_item_name(item_pointer, data)}", label: :cover)
-    LinkedList.delete_pointer(item_header, item_pointer)
+    IO.inspect("Covering #{get_item_name(column_pointer, data)}", label: :cover)
+    LinkedList.delete_pointer(item_header, column_pointer)
+    IO.inspect("Deleted column pointer #{column_pointer}")
+    #IO.inspect("Iterating over #{item_options(column_pointer, data)}")
     #  For each i ← D[c], D[D[c]] , . . . , while i != c,
     iterate_column(
-      item_pointer,
+      column_pointer,
+      0, ## count of removed entries
       # For each j ← R[i], R[R[i]] , . . . , while j != i,
-      fn i ->
+      fn i, acc ->
         iterate_row(
           i,
-          fn j ->
+          acc,
+          fn j, acc2 ->
             # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
             if i != j do
               item_name = get_item_name(Map.get(top, j), data)
 
               IO.inspect(
-                "Remove option #{j} from #{item_name} (#{item_options(j, item_lists) |> Enum.join(",")})"
+                "Remove option #{j} from #{item_name}" #(#{item_options(j, data) |> Enum.join(",")})"
               )
 
               LinkedList.delete_pointer(item_lists, j)
+              acc2 + 1
+            else
+              acc2
             end
           end,
           data
@@ -223,24 +248,108 @@ defmodule InPlace.ExactCover do
   ## This is for debugging only.
   ## We won't need to pass item name/id, passing item pointer
   ## would be sufficient for the implementation
-  def cover(item_name, %{item_names: item_names} = data) do
-    cover(item_pointer(item_name, item_names), data)
+  def cover(item_name, data) do
+    cover(column_pointer(item_name, data), data)
   end
+
+  # def uncover(num_columns, num_entries,
+  #       %{
+  #         item_header: item_header,
+  #         item_lists: item_lists
+  #       } = _data
+  #     )
+  #   when is_integer(num_columns) and is_integer(num_entries) do
+  #     restore(num_columns, item_header)
+  #     restore(num_entries, item_lists)
+  #   # For each i = U[c], U[U[c]] , . . . , while i != c,
+  #   # for each j ← L[i], L[L[i]] , . . . , while j != i,
+  #   # set S C[j]  ← S [j]  + 1,
+  #   # and set U[D[j]]  ← j, D[U[j]]  ← j.
+  #   # Set L[R[c]]  ← c and R[L[c]]  ← c.
+  # end
+
+  def uncover(
+        column_pointer,
+        %{
+          item_header: item_header,
+          top: top,
+          item_lists: item_lists
+        } = data
+      )
+      when is_integer(column_pointer) and column_pointer > 0 do
+    # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
+    column_name = get_item_name(column_pointer, data)
+    IO.inspect("Uncovering #{column_name}", label: :cover)
+    LinkedList.restore_pointer(item_header, column_pointer)
+    IO.inspect("Header pointer restored")
+    #  For each i ← D[c], D[D[c]] , . . . , while i != c,
+    iterate_column(
+      column_pointer,
+      0, ## count of removed entries
+      # For each j ← R[i], R[R[i]] , . . . , while j != i,
+      fn i, acc ->
+        iterate_row(
+          i,
+          acc,
+          fn j, acc2 ->
+            # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
+            if i != j do
+              item_name = get_item_name(Map.get(top, j), data)
+
+              IO.inspect(
+                "Restore option #{j} from #{item_name}" # (#{item_options(j, data) |> Enum.join(",")})"
+              )
+
+              LinkedList.restore_pointer(item_lists, j)
+              acc2 + 1
+            else
+              acc2
+            end
+          end,
+          data, false
+        )
+
+        #       and set S[C[j]]  ← S[C[j]]  − 1
+        ## TODO: this is for tracking list sizes; important for branching
+        ## , but we'll leave it out for now.
+      end,
+      data, false
+    )
+  end
+
+
+
+  def restore(0, _linked_list) do
+    :ok
+  end
+
+  def restore(n, linked_list) do
+    LinkedList.restore(linked_list)
+    restore(n - 1, linked_list)
+  end
+
 
   ## `column pointer` is a pointer in `item_header` linked list.
   ## The element is points to is a 'top' of the column,
   ## which is a pointer in `item_lists` linked list
   def iterate_column(
         column_pointer,
+        initial_value,
         iterator_fun,
-        %{item_header: item_header, item_lists: columns} = _data
+        %{item_header: item_header, item_lists: columns} = _data, forward? \\ true
       ) do
     column_top = LinkedList.data(item_header, column_pointer)
 
     LinkedList.iterate(columns,
-      start: LinkedList.next(columns, column_top),
-      action: fn column_element ->
-        column_element != column_top && iterator_fun.(column_element)
+      start: forward? && LinkedList.next(columns, column_top) || LinkedList.prev(columns, column_top),
+      initial_value: initial_value,
+      forward: forward?,
+      action: fn column_element, acc ->
+        if column_element != column_top do
+          iterator_fun.(column_element, acc)
+        else
+          acc
+        end
       end
     )
   end
@@ -248,22 +357,31 @@ defmodule InPlace.ExactCover do
   ## `row_pointer` is any pointer in the list of `option_lists` items.
   ## `option_lists` is a linked list partitioned by option sublists
   ## , each sublist represents an option.
-  def iterate_row(row_pointer, iterator_fun, %{option_lists: rows} = _data) do
+  def iterate_row(row_pointer, initial_value, iterator_fun, %{option_lists: rows} = _data, forward? \\ true) do
     LinkedList.iterate(rows,
       start: row_pointer,
-      action: fn p -> iterator_fun.(p) end
+      initial_value: initial_value,
+      forward: forward?,
+      action: fn p, acc -> iterator_fun.(p, acc) end
     )
   end
 
-  def item_options(member, item_lists) do
+  ## `entry` is a pointer to the member of `item_lists`
+  def item_options(entry, %{item_lists: item_lists} = _data) when is_integer(entry) do
     LinkedList.iterate(item_lists,
       initial_value: [],
-      start: member,
+      start: entry,
       action: fn p, acc -> [p | acc] end
     )
   end
 
-  def item_pointer(item_name, item_names) do
+  def item_options(item_name, data) do
+    item_options(map_size(data.top) + 1 - column_pointer(item_name, data), data)
+  end
+
+
+
+  def column_pointer(item_name, %{item_names: item_names} = _data) do
     length(item_names) -
       Enum.find_index(item_names, fn name -> name == item_name end)
   end
