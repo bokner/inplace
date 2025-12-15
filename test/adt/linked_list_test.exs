@@ -63,6 +63,14 @@ defmodule InPlace.LinkedListTest do
         LinkedList.iterate(ll, start: LinkedList.tail(ll), initial_value: [], action: fn p, acc -> [LinkedList.data(ll, p) | acc]  end)
       assert from_tail_list == Enum.to_list(9..1//-1) ++ [10]
 
+      ## Backward, from tail
+      backward_from_tail = LinkedList.iterate(ll,
+        forward: false,
+        initial_value: [],
+        start: LinkedList.tail(ll),
+        action: fn p, acc -> [LinkedList.data(ll, p) | acc]  end)
+      assert backward_from_tail == Enum.to_list(1..10)
+
     end
 
     test "recycling of indices" do
