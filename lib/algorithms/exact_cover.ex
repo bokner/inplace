@@ -59,11 +59,11 @@ defmodule InPlace.ExactCover do
           ## a (17, 1, 8) circuit.
           header_idx + entry_count
         end),
-        undo: nil
+        undo: true #nil
       )
 
     item_lists_ll =
-      LinkedList.new(Enum.to_list(1..(entry_count + num_items)), undo: nil)
+      LinkedList.new(Enum.to_list(1..(entry_count + num_items)), undo: true) # nil)
       |> tap(fn ll ->
         item_lists
         |> Enum.zip((entry_count + 1)..(entry_count + num_items))
@@ -157,17 +157,18 @@ defmodule InPlace.ExactCover do
             #  uncover column j (see below).
             #r = Array.get(solution, k)
 
-            iterate_row(r, nil, fn j, _acc ->
-              if j != r do
-                uncover(Map.get(top, j), data)
-              end
-            end, data, false)
+            # iterate_row(r, nil, fn j, _acc ->
+            #   if j != r do
+            #     uncover(Map.get(top, j), data)
+            #   end
+            # end, data, false)
+            uncover(num_covered_columns, num_removed_entries, data)
           end,
         data
       )
 
       # Uncover column c and return.
-      uncover(c, data)
+      uncover(1, num_removed_entries, data)
       IO.inspect("Search #{k} completed")
     end
   end
@@ -252,70 +253,70 @@ defmodule InPlace.ExactCover do
     cover(column_pointer(item_name, data), data)
   end
 
-  # def uncover(num_columns, num_entries,
-  #       %{
-  #         item_header: item_header,
-  #         item_lists: item_lists
-  #       } = _data
-  #     )
-  #   when is_integer(num_columns) and is_integer(num_entries) do
-  #     restore(num_columns, item_header)
-  #     restore(num_entries, item_lists)
-  #   # For each i = U[c], U[U[c]] , . . . , while i != c,
-  #   # for each j ← L[i], L[L[i]] , . . . , while j != i,
-  #   # set S C[j]  ← S [j]  + 1,
-  #   # and set U[D[j]]  ← j, D[U[j]]  ← j.
-  #   # Set L[R[c]]  ← c and R[L[c]]  ← c.
-  # end
-
-  def uncover(
-        column_pointer,
+  def uncover(num_columns, num_entries,
         %{
           item_header: item_header,
-          top: top,
           item_lists: item_lists
-        } = data
+        } = _data
       )
-      when is_integer(column_pointer) and column_pointer > 0 do
-    # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
-    column_name = get_item_name(column_pointer, data)
-    IO.inspect("Uncovering #{column_name}", label: :cover)
-    LinkedList.restore_pointer(item_header, column_pointer)
-    IO.inspect("Header pointer restored")
-    #  For each i ← D[c], D[D[c]] , . . . , while i != c,
-    iterate_column(
-      column_pointer,
-      0, ## count of removed entries
-      # For each j ← R[i], R[R[i]] , . . . , while j != i,
-      fn i, acc ->
-        iterate_row(
-          i,
-          acc,
-          fn j, acc2 ->
-            # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
-            if i != j do
-              item_name = get_item_name(Map.get(top, j), data)
-
-              IO.inspect(
-                "Restore option #{j} from #{item_name}" # (#{item_options(j, data) |> Enum.join(",")})"
-              )
-
-              LinkedList.restore_pointer(item_lists, j)
-              acc2 + 1
-            else
-              acc2
-            end
-          end,
-          data, false
-        )
-
-        #       and set S[C[j]]  ← S[C[j]]  − 1
-        ## TODO: this is for tracking list sizes; important for branching
-        ## , but we'll leave it out for now.
-      end,
-      data, false
-    )
+    when is_integer(num_columns) and is_integer(num_entries) do
+      restore(num_columns, item_header)
+      restore(num_entries, item_lists)
+    # For each i = U[c], U[U[c]] , . . . , while i != c,
+    # for each j ← L[i], L[L[i]] , . . . , while j != i,
+    # set S C[j]  ← S [j]  + 1,
+    # and set U[D[j]]  ← j, D[U[j]]  ← j.
+    # Set L[R[c]]  ← c and R[L[c]]  ← c.
   end
+
+  # def uncover(
+  #       column_pointer,
+  #       %{
+  #         item_header: item_header,
+  #         top: top,
+  #         item_lists: item_lists
+  #       } = data
+  #     )
+  #     when is_integer(column_pointer) and column_pointer > 0 do
+  #   # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
+  #   column_name = get_item_name(column_pointer, data)
+  #   IO.inspect("Uncovering #{column_name}", label: :cover)
+  #   LinkedList.restore_pointer(item_header, column_pointer)
+  #   IO.inspect("Header pointer restored")
+  #   #  For each i ← D[c], D[D[c]] , . . . , while i != c,
+  #   iterate_column(
+  #     column_pointer,
+  #     0, ## count of removed entries
+  #     # For each j ← R[i], R[R[i]] , . . . , while j != i,
+  #     fn i, acc ->
+  #       iterate_row(
+  #         i,
+  #         acc,
+  #         fn j, acc2 ->
+  #           # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
+  #           if i != j do
+  #             item_name = get_item_name(Map.get(top, j), data)
+
+  #             IO.inspect(
+  #               "Restore option #{j} from #{item_name}" # (#{item_options(j, data) |> Enum.join(",")})"
+  #             )
+
+  #             LinkedList.restore_pointer(item_lists, j)
+  #             acc2 + 1
+  #           else
+  #             acc2
+  #           end
+  #         end,
+  #         data, false
+  #       )
+
+  #       #       and set S[C[j]]  ← S[C[j]]  − 1
+  #       ## TODO: this is for tracking list sizes; important for branching
+  #       ## , but we'll leave it out for now.
+  #     end,
+  #     data, false
+  #   )
+  # end
 
 
 
