@@ -220,7 +220,7 @@ defmodule InPlace.ExactCover do
   ## from which we will handle (reduce) the options
   ## associated with the item.
   ##
-  defp cover(
+  def cover(
         column_pointer,
         %{
           item_header: item_header,
@@ -272,7 +272,7 @@ defmodule InPlace.ExactCover do
   ## This is for debugging only.
   ## We won't need to pass item name/id, passing item pointer
   ## would be sufficient for the implementation
-  defp cover(item_name, data) do
+  def cover(item_name, data) do
     cover(column_pointer(item_name, data), data)
   end
 
