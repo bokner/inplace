@@ -323,6 +323,33 @@ defmodule InPlace.LinkedList do
       true ->
         throw({:error, :action_invalid_arity})
     end
+
+  end
+
+  ## "Reducer" iteration
+  defp iterate_impl(_list, @terminator, _stop_on, action, acc) when is_function(action, 2) do
+    acc
+  end
+
+  defp iterate_impl(list, current_pointer, stop_on, action, acc) when is_function(action, 2) do
+    case action.(current_pointer, acc) do
+      {:halt, new_acc} ->
+        new_acc
+      result ->
+        new_acc = case result do
+            {:cont, r} ->
+              r
+            r -> r
+          end
+          next_p = next(list, current_pointer)
+
+          if stop_on.(next_p) do
+              new_acc
+          else
+            iterate_impl(list, next_p, stop_on, action, new_acc)
+          end
+        end
+
   end
 
   ## Iteration with side-effects
