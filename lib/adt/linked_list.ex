@@ -262,6 +262,23 @@ defmodule InPlace.LinkedList do
     end
   end
 
+  def pointer_deleted?(%{mode: mode} = list, pointer) do
+    if mode == @doubly_linked_mode do
+      # previous = prev(list, pointer)
+      # previous == @terminator ||
+      # pointer != next(list, previous)
+      case next_pointer(list, pointer) do
+        @terminator ->
+          previous = prev_pointer(list, pointer)
+          previous == @terminator ||pointer != next_pointer(list, previous)
+        next ->
+          pointer != prev_pointer(list, next)
+        end
+    else
+      false
+    end
+  end
+
   def to_list(list) do
     reduce(list, []) |> Enum.reverse()
   end
