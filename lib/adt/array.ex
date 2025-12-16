@@ -34,7 +34,7 @@ defmodule InPlace.Array do
     update_loop(array, idx, get(array, idx), update_fun)
   end
 
-  def update_loop(array, idx, current, update_fun) do
+  defp update_loop(array, idx, current, update_fun) do
     case :atomics.compare_exchange(array, idx, current, update_fun.(current)) do
       :ok ->
         :ok

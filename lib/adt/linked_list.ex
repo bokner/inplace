@@ -21,7 +21,15 @@ defmodule InPlace.LinkedList do
   @singly_linked_mode :singly_linked
   @doubly_linked_mode :doubly_linked
 
-  def new(size, opts \\ []) when is_integer(size) and size > 0 do
+  def new(values_or_size, opts \\ [])
+
+  def new(values, opts) when is_list(values) do
+    new(max(length(values), Keyword.get(opts, :capacity, 0)), opts)
+    |> tap(fn ll -> Enum.each(values, fn v -> add_last(ll, v) end) end)
+  end
+
+
+  def new(size, opts) when is_integer(size) and size > 0 do
     opts = Keyword.merge(default_opts(), opts)
     mode = Keyword.get(opts, :mode)
     circular? = Keyword.get(opts, :circular)
@@ -65,6 +73,54 @@ defmodule InPlace.LinkedList do
       end
     end)
 
+  end
+
+  @doc """
+  This will create a circuit out of the list of pointers.
+
+  !!!!! Hazard warning !!!!!
+  If you want to avoid infinite loops
+  while iterating over the list that contains circuits,
+  make sure that you start the iteration within the circuit
+  (using :start option fir iterate/2).
+
+  For instance
+  ```elixir
+  import InPlace.LinkedList
+  ll = new(Enum.to_list(1..10))
+  circuit(ll, [2, 4, 6])
+  iterate, start: 1, action: fn p -> IO.inspect(p) end
+  ```
+  will loop indefinitely, as the iteration will be trapped in `2 -> 4 -> 6` circuit
+  once entering it from `1` pointer.
+  """
+  def circuit(_list, []) do
+    :ok
+  end
+
+  def circuit(list, [single]) do
+    wire(list, single, single)
+  end
+
+  def circuit(list, [first, second | rest] = _pointers) do
+    wire(list, first, second)
+    last = circuit_impl(list, second, rest)
+    ## Short the circuit
+    wire(list, last, first)
+  end
+
+  defp circuit_impl(_list, last, []) do
+    last
+  end
+
+  defp circuit_impl(list, current, [next | rest]) do
+    wire(list, current, next)
+    circuit_impl(list, next, rest)
+  end
+
+  defp wire(list, first, second) do
+    set_next(list, first, second)
+    set_previous(list, second, first)
   end
 
   def get(list, idx) when is_integer(idx) and idx > 0 do
@@ -206,6 +262,23 @@ defmodule InPlace.LinkedList do
     end
   end
 
+  def pointer_deleted?(%{mode: mode} = list, pointer) do
+    if mode == @doubly_linked_mode do
+      # previous = prev(list, pointer)
+      # previous == @terminator ||
+      # pointer != next(list, previous)
+      case next_pointer(list, pointer) do
+        @terminator ->
+          previous = prev_pointer(list, pointer)
+          previous == @terminator ||pointer != next_pointer(list, previous)
+        next ->
+          pointer != prev_pointer(list, next)
+        end
+    else
+      false
+    end
+  end
+
   def to_list(list) do
     reduce(list, []) |> Enum.reverse()
   end
@@ -224,7 +297,9 @@ defmodule InPlace.LinkedList do
 
   def iterate(list, opts) do
     start = Keyword.get(opts, :start, head(list))
+    forward? = Keyword.get(opts, :forward, true)
     action = Keyword.get(opts, :action, default_reducer(list))
+    initial_value = Keyword.get(opts, :initial_value, [])
     stop_on = Keyword.get(opts, :stop_on, fn next ->
       last_pointer = list.circular && start || @terminator
       next == last_pointer
@@ -242,27 +317,11 @@ defmodule InPlace.LinkedList do
     ##
     cond do
       is_function(action, 1) ->
-        iterate_impl(list, start, stop_on, action)
+        iterate_impl(list, start, stop_on, action, forward?)
       is_function(action, 2) ->
-        iterate_impl(list, start, stop_on, action, Keyword.get(opts, :initial_value))
+        iterate_impl(list, start, stop_on, action, forward?, initial_value)
       true ->
         throw({:error, :action_invalid_arity})
-    end
-  end
-
-  ## Iteration with side-effects
-  defp iterate_impl(_list, @terminator, _stop_on, action) when is_function(action, 1) do
-    :ok
-  end
-
-  defp iterate_impl(list, current_pointer, stop_on, action) when is_function(action, 1) do
-    action.(current_pointer)
-
-    next_p = next(list, current_pointer)
-    if stop_on.(next_p) do
-      :ok
-    else
-      iterate_impl(list, next_p, stop_on, action)
     end
 
   end
@@ -293,6 +352,50 @@ defmodule InPlace.LinkedList do
 
   end
 
+  ## Iteration with side-effects
+  defp iterate_impl(_list, @terminator, _stop_on, action, _forward?) when is_function(action, 1) do
+    :ok
+  end
+
+  defp iterate_impl(list, current_pointer, stop_on, action, forward?) when is_function(action, 1) do
+    case action.(current_pointer) do
+      :halt -> :ok
+      _ ->
+        next_p = forward? && next(list, current_pointer) || prev(list, current_pointer)
+        if stop_on.(next_p) do
+          :ok
+        else
+          iterate_impl(list, next_p, stop_on, action, forward?)
+        end
+      end
+  end
+
+  ## "Reducer" iteration
+  defp iterate_impl(_list, @terminator, _stop_on, action, _forward?, acc) when is_function(action, 2) do
+    acc
+  end
+
+  defp iterate_impl(list, current_pointer, stop_on, action, forward?, acc) when is_function(action, 2) do
+    case action.(current_pointer, acc) do
+      {:halt, new_acc} ->
+        new_acc
+      result ->
+        new_acc = case result do
+            {:cont, r} ->
+              r
+            r -> r
+          end
+          next_p = forward? && next(list, current_pointer) || prev(list, current_pointer)
+
+          if stop_on.(next_p) do
+              new_acc
+          else
+            iterate_impl(list, next_p, stop_on, action, forward?, new_acc)
+          end
+        end
+
+  end
+
   def empty?(list) do
     head(list) == @terminator
   end
@@ -304,7 +407,7 @@ defmodule InPlace.LinkedList do
   def default_opts() do
     [
       mode: @doubly_linked_mode,
-      circular: false,
+      circular: true,
       undo: false,
       mapper_fun: &Function.identity/1
     ]
@@ -442,12 +545,16 @@ defmodule InPlace.LinkedList do
   ## Could be restored later for circular doubly linked list
   ## See `restore/1
   ##
+
   defp forget_or_hide(%{undo: undo?} = list, pointer) when is_integer(pointer) and pointer > 0 do
-    if undo? do
-      hide_pointer(list, pointer)
-    else
-      forget_pointer(list, pointer)
-    end
+    cond do
+      is_nil(undo?) ->
+        :ok
+      undo? ->
+        hide_pointer(list, pointer)
+      true ->
+        forget_pointer(list, pointer)
+      end
   end
 
   defp forget_pointer(%{free: free} = _list, pointer) do
@@ -474,7 +581,7 @@ defmodule InPlace.LinkedList do
     false
   end
 
-  defp restore_pointer(list, pointer) do
+  def restore_pointer(list, pointer) do
     next_pointer = next_pointer(list, pointer)
     ## Special case: next_pointer for restored pointer
     ## is a current head

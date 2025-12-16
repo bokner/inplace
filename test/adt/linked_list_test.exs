@@ -44,10 +44,16 @@ defmodule InPlace.LinkedListTest do
     end
 
     test "iterator (side effects)" do
-      ll = LinkedList.new(10, circular: true, mode: :doubly_linked)
+      ll = LinkedList.new(10, circular: true, mode: :doubly_linked, undo: true)
       Enum.each(1..10, fn value -> LinkedList.add_last(ll, value) end)
       assert LinkedList.size(ll) == 10
-      LinkedList.iterate(ll, action: fn p -> LinkedList.delete_pointer(ll, p)  end)
+      LinkedList.iterate(ll, action: fn p ->
+        refute LinkedList.pointer_deleted?(ll, p)
+      end)
+      LinkedList.iterate(ll, action: fn p ->
+        LinkedList.delete_pointer(ll, p)
+        assert LinkedList.pointer_deleted?(ll, p)
+      end)
       assert LinkedList.size(ll) == 0
       assert Enum.empty?(LinkedList.to_list(ll))
     end
@@ -62,6 +68,14 @@ defmodule InPlace.LinkedListTest do
       from_tail_list =
         LinkedList.iterate(ll, start: LinkedList.tail(ll), initial_value: [], action: fn p, acc -> [LinkedList.data(ll, p) | acc]  end)
       assert from_tail_list == Enum.to_list(9..1//-1) ++ [10]
+
+      ## Backward, from tail
+      backward_from_tail = LinkedList.iterate(ll,
+        forward: false,
+        initial_value: [],
+        start: LinkedList.tail(ll),
+        action: fn p, acc -> [LinkedList.data(ll, p) | acc]  end)
+      assert backward_from_tail == Enum.to_list(1..10)
 
     end
 
@@ -136,16 +150,20 @@ defmodule InPlace.LinkedListTest do
       assert [1, 2, 3, 4] == LinkedList.to_list(dllc)
       head = LinkedList.head(dllc)
       LinkedList.delete_pointer(dllc, head)
+      assert LinkedList.pointer_deleted?(dllc, head)
       assert [2, 3, 4] == LinkedList.to_list(dllc)
       tail = LinkedList.tail(dllc)
       LinkedList.delete_pointer(dllc, tail)
+      assert LinkedList.pointer_deleted?(dllc, tail)
       assert LinkedList.prev(dllc, tail) == LinkedList.tail(dllc)
       assert [2, 3] == LinkedList.to_list(dllc)
       tail = LinkedList.tail(dllc)
       LinkedList.delete_pointer(dllc, tail)
+      assert LinkedList.pointer_deleted?(dllc, tail)
       assert [2] == LinkedList.to_list(dllc)
       tail = LinkedList.tail(dllc)
       LinkedList.delete_pointer(dllc, tail)
+      assert LinkedList.pointer_deleted?(dllc, tail)
       assert LinkedList.empty?(dllc)
     end
 
