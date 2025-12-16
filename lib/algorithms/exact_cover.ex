@@ -25,15 +25,17 @@ defmodule InPlace.ExactCover do
     ## Build the data structures (roughly as described by D. Knuth)
     {item_map, entry_count, option_lists, option_start_ids} =
       Enum.reduce(options, {Map.new(), 0, [], []}, fn option,
-                                                  {directory, entry_idx, option_items, option_start_ids} = _acc ->
+                                                      {directory, entry_idx, option_items,
+                                                       option_start_ids} = _acc ->
+        option_start_idx = entry_idx + 1
 
-          option_start_idx = entry_idx + 1
-          {directory, entry_count, items} =
+        {directory, entry_count, items} =
           Enum.reduce(option, {directory, entry_idx, []}, fn item_name,
                                                              {dir_acc, entry_idx_acc,
                                                               option_items_acc} ->
             ## 1-based index, for convenience
             entry_idx_acc = entry_idx_acc + 1
+
             {
               Map.update(dir_acc, item_name, [entry_idx_acc], fn entries ->
                 [entry_idx_acc | entries]
@@ -116,15 +118,15 @@ defmodule InPlace.ExactCover do
   end
 
   defp search(
-        k,
-        %{
-          item_header: item_header,
-          top: top,
-          solution: solution
-        } = data,
-        solver_opts,
-        choose_column_fun \\ fn _step, data -> choose_column(data) end
-      ) do
+         k,
+         %{
+           item_header: item_header,
+           top: top,
+           solution: solution
+         } = data,
+         solver_opts,
+         choose_column_fun \\ fn _step, data -> choose_column(data) end
+       ) do
     ## Knuth:
     # If R[h] = h, print the current solution and return.
     ##
@@ -159,15 +161,20 @@ defmodule InPlace.ExactCover do
               r,
               {0, 0},
               fn j, {columns_acc, entries_acc} = acc ->
-                if j != r do
-                  # Tricky; cover/2 expects header (not item) pointer,
-                  # so we need to convert
-                  {columns_acc + 1,
-                   Map.get(top, j)
-                   |> cover(data)
-                   |> Kernel.+(entries_acc)}
-                else
-                  acc
+                cond do
+                  LinkedList.empty?(item_header) ->
+                    {:halt, acc}
+
+                  j != r ->
+                    # Tricky; cover/2 expects header (not item) pointer,
+                    # so we need to convert
+                    {columns_acc + 1,
+                     Map.get(top, j)
+                     |> cover(data)
+                     |> Kernel.+(entries_acc)}
+
+                  true ->
+                    acc
                 end
               end,
               data
@@ -203,11 +210,13 @@ defmodule InPlace.ExactCover do
           {:halt, acc}
 
         option_entry ->
-          {:cont, [
-            Enum.find_index(data.option_start_ids, fn val ->
-              val == option_entry
-            end) | acc]
-          }
+          {:cont,
+           [
+             Enum.find_index(data.option_start_ids, fn val ->
+               val == option_entry
+             end)
+             | acc
+           ]}
       end
     end)
     |> solution_handler.()
@@ -277,14 +286,14 @@ defmodule InPlace.ExactCover do
   end
 
   defp uncover(
-        num_columns,
-        num_entries,
-        %{
-          item_header: item_header,
-          item_lists: item_lists
-        } = _data
-      )
-      when is_integer(num_columns) and is_integer(num_entries) do
+         num_columns,
+         num_entries,
+         %{
+           item_header: item_header,
+           item_lists: item_lists
+         } = _data
+       )
+       when is_integer(num_columns) and is_integer(num_entries) do
     restore(num_columns, item_header)
     restore(num_entries, item_lists)
   end
@@ -294,20 +303,23 @@ defmodule InPlace.ExactCover do
   end
 
   defp restore(n, linked_list) do
-    LinkedList.restore(linked_list)
-    restore(n - 1, linked_list)
+    if LinkedList.restore(linked_list) do
+      restore(n - 1, linked_list)
+    else
+      :ok
+    end
   end
 
   ## `column pointer` is a pointer in `item_header` linked list.
   ## The element is points to is a 'top' of the column,
   ## which is a pointer in `item_lists` linked list
   defp iterate_column(
-        column_pointer,
-        initial_value,
-        iterator_fun,
-        %{item_header: item_header, item_lists: columns} = _data,
-        forward? \\ true
-      ) do
+         column_pointer,
+         initial_value,
+         iterator_fun,
+         %{item_header: item_header, item_lists: columns} = _data,
+         forward? \\ true
+       ) do
     column_top = LinkedList.data(item_header, column_pointer)
 
     LinkedList.iterate(columns,
@@ -329,12 +341,12 @@ defmodule InPlace.ExactCover do
   ## `option_lists` is a linked list partitioned by option sublists
   ## , each sublist represents an option.
   defp iterate_row(
-        row_pointer,
-        initial_value,
-        iterator_fun,
-        %{option_lists: rows} = _data,
-        forward? \\ true
-      ) do
+         row_pointer,
+         initial_value,
+         iterator_fun,
+         %{option_lists: rows} = _data,
+         forward? \\ true
+       ) do
     LinkedList.iterate(rows,
       start: row_pointer,
       initial_value: initial_value,
@@ -343,10 +355,8 @@ defmodule InPlace.ExactCover do
     )
   end
 
-
   defp column_pointer(item_name, %{item_names: item_names} = _data) do
     length(item_names) -
       Enum.find_index(item_names, fn name -> name == item_name end)
   end
-
 end
