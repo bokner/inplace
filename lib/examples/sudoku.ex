@@ -173,7 +173,3 @@ def solve_puzzle(puzzle: list[int]) -> list[int]:
 
   """
 end
-
-[
-~w{1 s1 s3}, ~w{1 s2 s4}, ~w{1 s3 s5}, ~w{1 s4 s6}, ~w{2 s1 s4}, ~w{2 s2 s5}, ~w{2 s3 s6}, ~w{3 s1 s5}, ~w{3 s2 s6}
-]
