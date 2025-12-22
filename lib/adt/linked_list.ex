@@ -259,6 +259,127 @@ defmodule InPlace.LinkedList do
     mapper.(Array.get(refs, pointer))
   end
 
+  ## Iteration
+  ##
+  def to_list(list) do
+    reduce(list, []) |> Enum.reverse()
+  end
+
+  def reduce(list, initial_value, reducer \\ nil) do
+    iterate(list, action: (reducer || default_reducer(list)), initial_value: initial_value)
+  end
+
+  defp default_reducer(list) do
+    (fn p, acc ->
+        [data(list, p) | acc]
+    end)
+  end
+
+  def iterate(list, opts \\ [])
+
+  def iterate(list, opts) do
+    start = Keyword.get(opts, :start, head(list))
+    forward? = Keyword.get(opts, :forward, true)
+    action = Keyword.get(opts, :action, default_reducer(list))
+    initial_value = Keyword.get(opts, :initial_value, [])
+    stop_on = Keyword.get(opts, :stop_on, fn next ->
+      last_pointer = list.circular && start || @terminator
+      next == last_pointer
+    end)
+
+    ## If action is of arity 1, it's a "side-effect" function.
+    ## The argument is a pointer.
+    ## For instance, it might conditionally delete some entries,
+    ## etc.
+    ## The result of the action call would be ignored.
+    ## If action is of arity 2, it's a "reducer" function
+    ## The arguments are : pointer and accumulated value
+    ## If {:halt, term()} is returned, the iteration is halted with term()
+    ## If {:cont, term()} or term() is returned, the iteration continues.
+    ##
+    cond do
+      is_function(action, 1) ->
+        iterate_impl(list, start, stop_on, action, forward?)
+      is_function(action, 2) ->
+        iterate_impl(list, start, stop_on, action, forward?, initial_value)
+      true ->
+        throw({:error, :action_invalid_arity})
+    end
+
+  end
+
+  ## "Reducer" iteration
+  defp iterate_impl(_list, @terminator, _stop_on, action, acc) when is_function(action, 2) do
+    acc
+  end
+
+  defp iterate_impl(list, current_pointer, stop_on, action, acc) when is_function(action, 2) do
+    case action.(current_pointer, acc) do
+      {:halt, new_acc} ->
+        new_acc
+      result ->
+        new_acc = case result do
+            {:cont, r} ->
+              r
+            r -> r
+          end
+          next_p = next(list, current_pointer)
+
+          if stop_on.(next_p) do
+              new_acc
+          else
+            iterate_impl(list, next_p, stop_on, action, new_acc)
+          end
+        end
+
+  end
+
+  ## Iteration with side-effects
+  defp iterate_impl(_list, @terminator, _stop_on, action, _forward?) when is_function(action, 1) do
+    :ok
+  end
+
+  defp iterate_impl(list, current_pointer, stop_on, action, forward?) when is_function(action, 1) do
+    case action.(current_pointer) do
+      :halt -> :ok
+      _ ->
+        next_p = forward? && next(list, current_pointer) || prev(list, current_pointer)
+        if stop_on.(next_p) do
+          :ok
+        else
+          iterate_impl(list, next_p, stop_on, action, forward?)
+        end
+      end
+  end
+
+  ## "Reducer" iteration
+  defp iterate_impl(_list, @terminator, _stop_on, action, _forward?, acc) when is_function(action, 2) do
+    acc
+  end
+
+  defp iterate_impl(list, current_pointer, stop_on, action, forward?, acc) when is_function(action, 2) do
+    case action.(current_pointer, acc) do
+      {:halt, new_acc} ->
+        new_acc
+      result ->
+        new_acc = case result do
+            {:cont, r} ->
+              r
+            r -> r
+          end
+          next_p = forward? && next(list, current_pointer) || prev(list, current_pointer)
+
+          if stop_on.(next_p) do
+              new_acc
+          else
+            iterate_impl(list, next_p, stop_on, action, forward?, new_acc)
+          end
+        end
+
+  end
+
+
+
 
 
 end
