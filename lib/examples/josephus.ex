@@ -11,7 +11,7 @@ defmodule InPlace.Examples.Josephus do
   """
   def solve(num_soldiers, every_k) do
     circle = LinkedList.new(num_soldiers, circular: true, mode: :doubly_linked, undo: true)
-    Enum.each(1..num_soldiers, fn n -> LinkedList.add_last(circle, n) end)
+    Enum.each(1..num_soldiers, fn n -> LinkedList.append(circle, n) end)
 
     _number_of_moves = LinkedList.iterate(circle,
       initial_value: 1,
