@@ -15,6 +15,10 @@ defmodule InPlace.ExactCoverTest do
       )
     end
 
+    test "Instance for Langford numbers (Knuth)" do
+      assert_instance(langford3_instance())
+    end
+
     test "Instance with no exact cover" do
       options = [
         [1, 2, 3],
@@ -49,7 +53,9 @@ defmodule InPlace.ExactCoverTest do
           [:b, :g],
           [:d, :e, :g]
         ],
-        [[:b, :g], [:a, :d], [:c, :e, :f]]
+        [
+          [[:b, :g], [:a, :d], [:c, :e, :f]]
+        ]
       }
     end
 
@@ -64,8 +70,28 @@ defmodule InPlace.ExactCoverTest do
           [2, 3, 6, 7],
           [2, 7]
         ],
-        [[3, 5, 6], [2, 7], [1, 4]]
+        [
+          [[3, 5, 6], [2, 7], [1, 4]]
+        ]
       }
+    end
+
+    defp langford3_instance() do
+      {[
+         ~w{1 s1 s3},
+         ~w{1 s2 s4},
+         ~w{1 s3 s5},
+         ~w{1 s4 s6},
+         ~w{2 s1 s4},
+         ~w{2 s2 s5},
+         ~w{2 s3 s6},
+         ~w{3 s1 s5},
+         ~w{3 s2 s6}
+       ],
+       [
+         [["1", "s2", "s4"], ["2", "s3", "s6"], ["3", "s1", "s5"]],
+         [["1", "s3", "s5"], ["2", "s1", "s4"], ["3", "s2", "s6"]]
+       ]}
     end
 
     defp assert_instance(instance) do
@@ -75,25 +101,39 @@ defmodule InPlace.ExactCoverTest do
         solution_handler: async_solution_handler(options)
       )
 
-      received =
-        receive do
-          msg -> msg
-        end
+      received = flush()
 
-      assert Enum.sort(received) == Enum.sort(expected_solution)
+      assert Enum.all?(
+               Enum.zip(received, expected_solution),
+               fn {r, e} -> Enum.sort(List.flatten(r)) == Enum.sort(List.flatten(e)) end
+             )
 
       assert_exact_cover(options, received)
     end
 
-    defp assert_exact_cover(options, solution) do
-      combined =
-        Enum.reduce(tl(solution), MapSet.new(hd(solution)), fn option, acc ->
-          option_set = MapSet.new(option)
-          assert MapSet.disjoint?(option_set, acc)
-          MapSet.union(option_set, acc)
-        end)
+    defp assert_exact_cover(options, solutions) do
+      Enum.each(solutions, fn solution ->
+        combined =
+          Enum.reduce(tl(solution), MapSet.new(hd(solution)), fn option, acc ->
+            option_set = MapSet.new(option)
+            assert MapSet.disjoint?(option_set, acc)
+            MapSet.union(option_set, acc)
+          end)
 
-      assert MapSet.new(List.flatten(options)) == combined
+        assert MapSet.new(List.flatten(options)) == combined
+      end)
+    end
+
+    def flush() do
+      flush([])
+    end
+
+    def flush(acc) do
+      receive do
+        msg -> flush([Enum.sort(msg) | acc])
+      after
+        0 -> acc
+      end
     end
   end
 end
