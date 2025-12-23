@@ -14,10 +14,14 @@ defmodule InPlace.PriorityQueue do
     kv_mapping = init_mapping()
     compare_fun = Keyword.get(opts, :comparator)
     getter_fun = fn key -> get_mapping(kv_mapping, key) end
-    heap = Heap.new(capacity,
-      getter: getter_fun,
-      comparator: fn key1, key2 ->
-        compare_priorities(getter_fun, key1, key2, compare_fun) end)
+
+    heap =
+      Heap.new(capacity,
+        getter: getter_fun,
+        comparator: fn key1, key2 ->
+          compare_priorities(getter_fun, key1, key2, compare_fun)
+        end
+      )
 
     %{
       mapping: kv_mapping,
@@ -42,10 +46,12 @@ defmodule InPlace.PriorityQueue do
     insert(p_queue, key, priority)
   end
 
-  def insert(%{heap: heap, mapping: mapping, opts: opts} = p_queue, key, priority) when is_integer(key) and is_number(priority) do
+  def insert(%{heap: heap, mapping: mapping, opts: opts} = p_queue, key, priority)
+      when is_integer(key) and is_number(priority) do
     case get_mapping(mapping, key) do
       nil ->
         insert_new(p_queue, key, priority)
+
       {existing_key, current_priority, key_index} ->
         ## new priority is strictly less then the current one
         if !Keyword.get(opts, :comparator).(current_priority, priority) do
@@ -56,21 +62,25 @@ defmodule InPlace.PriorityQueue do
   end
 
   defp insert_new(%{mapping: mapping, heap: heap} = p_queue, key, priority) do
-      update_mapping(mapping, key, priority, size(p_queue) + 1)
-      Heap.insert(heap, key)
+    update_mapping(mapping, key, priority, size(p_queue) + 1)
+    Heap.insert(heap, key)
   end
 
   def get_min(%{heap: heap} = _p_queue) do
     case Heap.get_min(heap) do
-      nil -> nil
+      nil ->
+        nil
+
       {key, priority, _key_index} ->
         {key, priority}
-      end
+    end
   end
 
   def extract_min(%{mapping: mapping, heap: heap} = _p_queue) do
     case Heap.extract_min(heap) do
-      nil -> nil
+      nil ->
+        nil
+
       {key, priority, _key_index} = _h_min ->
         extract_duplicates(heap, {key, priority})
         extract_mapping(mapping, key)
@@ -86,14 +96,15 @@ defmodule InPlace.PriorityQueue do
       {k, p, _key_index} when k == key and p == priority ->
         Heap.extract_min(heap)
         extract_duplicates(heap, h_min)
-      _not_a_duplicate -> :ok
+
+      _not_a_duplicate ->
+        :ok
     end
   end
 
-
   defp default_opts() do
     [
-    comparator: &Kernel.<=/2
+      comparator: &Kernel.<=/2
     ]
   end
 
@@ -120,7 +131,6 @@ defmodule InPlace.PriorityQueue do
   defp extract_mapping(mapping, key) do
     Process.delete(mapping_key(mapping, key))
   end
-
 
   defp compare_priorities(getter_fun, pkey1, pkey2, compare_fun) do
     priority1 = get_priority(getter_fun, pkey1)
