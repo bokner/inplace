@@ -3,7 +3,7 @@ defmodule InPlace.LinkedListTest do
 
   alias InPlace.{LinkedList}
 
-  describe "Singly linked list" do
+  describe "Linked list" do
     test "operations" do
       ll = LinkedList.new(10)
       assert LinkedList.size(ll) == 0 && LinkedList.empty?(ll)
@@ -24,7 +24,7 @@ defmodule InPlace.LinkedListTest do
       assert LinkedList.to_list(ll) == [3, 2]
 
       LinkedList.insert(ll, 1, 4)
-      assert LinkedList.to_list(ll) == [3, 4, 2]
+      assert LinkedList.to_list(ll) == [4, 3, 2]
     end
 
     test "mapper" do
@@ -47,13 +47,16 @@ defmodule InPlace.LinkedListTest do
       ll = LinkedList.new(10, circular: true, mode: :doubly_linked, restore: true)
       Enum.each(1..10, fn value -> LinkedList.append(ll, value) end)
       assert LinkedList.size(ll) == 10
-      LinkedList.iterate(ll, action: fn p ->
+
+      LinkedList.iterate(ll, fn p ->
         refute LinkedList.pointer_deleted?(ll, p)
       end)
-      LinkedList.iterate(ll, action: fn p ->
+
+      LinkedList.iterate(ll, fn p ->
         LinkedList.delete_pointer(ll, p)
         assert LinkedList.pointer_deleted?(ll, p)
       end)
+
       assert LinkedList.size(ll) == 0
       assert Enum.empty?(LinkedList.to_list(ll))
     end
@@ -62,21 +65,36 @@ defmodule InPlace.LinkedListTest do
       ll = LinkedList.new(10, circular: true, mode: :doubly_linked)
       Enum.each(1..10, fn value -> LinkedList.append(ll, value) end)
       ## Start from head
-      from_head_list = LinkedList.iterate(ll, initial_value: [], action: fn p, acc -> [LinkedList.data(ll, p) | acc]  end)
+      from_head_list =
+        LinkedList.iterate(
+          ll,
+          fn p, acc -> [LinkedList.data(ll, p) | acc] end,
+          initial_value: []
+        )
+
       assert from_head_list == Enum.to_list(10..1//-1)
       ## Start from tail
       from_tail_list =
-        LinkedList.iterate(ll, start: LinkedList.tail(ll), initial_value: [], action: fn p, acc -> [LinkedList.data(ll, p) | acc]  end)
+        LinkedList.iterate(
+          ll,
+          fn p, acc -> [LinkedList.data(ll, p) | acc] end,
+          start: LinkedList.tail(ll),
+          initial_value: []
+        )
+
       assert from_tail_list == Enum.to_list(9..1//-1) ++ [10]
 
       ## Backward, from tail
-      backward_from_tail = LinkedList.iterate(ll,
-        forward: false,
-        initial_value: [],
-        start: LinkedList.tail(ll),
-        action: fn p, acc -> [LinkedList.data(ll, p) | acc]  end)
-      assert backward_from_tail == Enum.to_list(1..10)
+      backward_from_tail =
+        LinkedList.iterate(
+          ll,
+          fn p, acc -> [LinkedList.data(ll, p) | acc] end,
+          forward: false,
+          initial_value: [],
+          start: LinkedList.tail(ll)
+        )
 
+      assert backward_from_tail == Enum.to_list(1..10)
     end
 
     test "recycling of indices" do
@@ -98,54 +116,35 @@ defmodule InPlace.LinkedListTest do
     end
   end
 
-  describe "Circular linked list" do
-    test "navigation" do
-      cll = LinkedList.new(10, circular: true)
-      n = 10
-      ## Add n elements...
-      Enum.each(1..n, fn idx -> LinkedList.append(cll, idx) end)
-      ## Get a value at random pointer...
-      random_idx = Enum.random(1..n)
-      random_value = LinkedList.get(cll, random_idx)
-      ## Circle several times...
-      random_idx_circled = random_idx + Enum.random(1..10) * n
-      ## Arrive at the same place
-      assert random_value == LinkedList.get(cll, random_idx_circled)
-    end
-  end
-
-  describe "Doubly linked list" do
+  describe "Misc" do
     import InPlace.LinkedList
     @terminator 0
 
-    for circular? <- [true, false] do
-      @tag circular: circular?
-      test "operations (circular = #{circular?})", ctx do
-        dll = new(10, mode: :doubly_linked, circular: ctx.circular)
-        assert tail(dll) == @terminator
-        assert head(dll) == tail(dll)
-        append(dll, 1)
-        assert head(dll) == tail(dll)
-        refute tail(dll) == @terminator
-        ## Remove single element
-        delete(dll, 1)
-        assert tail(dll) == @terminator
-        ## Add several elements...
-        add_first(dll, 1)
-        add_first(dll, 2)
-        insert(dll, 1, 3)
-        assert [2, 3, 1] == to_list(dll)
-        ## Traverse back
-        assert_traverse(dll)
-        ## Remove some element
-        delete(dll, Enum.random([1, 2, 3]))
-        ## Traverse back after removal
-        assert_traverse(dll)
-      end
+    test "Mixed (addition, deletion, traversal with modification)" do
+      dll = new(10)
+      assert tail(dll) == @terminator
+      assert head(dll) == tail(dll)
+      append(dll, 1)
+      assert head(dll) == tail(dll)
+      refute tail(dll) == @terminator
+      ## Remove single element
+      delete(dll, 1)
+      assert tail(dll) == @terminator
+      ## Add several elements...
+      add_first(dll, 1)
+      add_first(dll, 2)
+      insert(dll, 1, 3)
+      assert [3, 2, 1] == to_list(dll)
+      ## Traverse back
+      assert_traverse(dll)
+      ## Remove some element
+      delete(dll, Enum.random([1, 2, 3]))
+      ## Traverse back after removal
+      assert_traverse(dll)
     end
 
     test "delete pointers" do
-      dllc = LinkedList.new(10, mode: :doubly_linked)
+      dllc = LinkedList.new(10, restore: true)
       Enum.each(1..4, fn value -> LinkedList.append(dllc, value) end)
       assert [1, 2, 3, 4] == LinkedList.to_list(dllc)
       head = LinkedList.head(dllc)
@@ -168,15 +167,17 @@ defmodule InPlace.LinkedListTest do
     end
 
     test "restore pointers" do
-      dllc = LinkedList.new(10, circular: true, mode: :doubly_linked, restore: true)
+      dllc = LinkedList.new(10, restore: true)
       n = 4
       ## Fill the list...
-      Enum.each(Enum.shuffle(1..n), fn value -> LinkedList.append(dllc, value) end)
+      Enum.each(1..n, fn value -> LinkedList.append(dllc, value) end)
       values = LinkedList.to_list(dllc)
 
-      initially_available_pointers = LinkedList.num_free_pointers(dllc)
+      initially_available_pointers = LinkedList.available(dllc)
       ## ...randomly remove all elements
-      Enum.each(1..n, fn _idx -> LinkedList.delete(dllc, Enum.random(1..LinkedList.size(dllc))) end)
+      Enum.shuffle(1..n)
+      |> Enum.each(fn idx -> LinkedList.delete_pointer(dllc, idx) end)
+
       ## Officially no elements in the list
       assert Enum.empty?(LinkedList.to_list(dllc))
       assert LinkedList.size(dllc) == 0
@@ -187,7 +188,7 @@ defmodule InPlace.LinkedListTest do
 
       assert LinkedList.size(dllc) == n
       ## Pointers reclaimed
-      assert initially_available_pointers == LinkedList.num_free_pointers(dllc)
+      assert initially_available_pointers == LinkedList.available(dllc)
     end
 
     defp assert_traverse(dll) do
@@ -203,5 +204,4 @@ defmodule InPlace.LinkedListTest do
       end)
     end
   end
-
 end

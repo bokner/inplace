@@ -20,7 +20,7 @@ defmodule InPlace.ExactCover do
     ]
   end
 
-  defp init(options) do
+  def init(options) do
     ## Options are sets that contain item names.
     ## Build the data structures (roughly as described by D. Knuth)
     {item_map, entry_count, option_lists, option_start_ids} =
@@ -64,11 +64,11 @@ defmodule InPlace.ExactCover do
           ## a (17, 1, 8) circuit.
           header_idx + entry_count
         end),
-        undo: true
+        restore: true
       )
 
     item_lists_ll =
-      LinkedList.new(Enum.to_list(1..(entry_count + num_items)), undo: true)
+      LinkedList.new(Enum.to_list(1..(entry_count + num_items)), restore: true)
       |> tap(fn ll ->
         item_lists
         |> Enum.zip((entry_count + 1)..(entry_count + num_items))
@@ -78,19 +78,21 @@ defmodule InPlace.ExactCover do
       end)
 
     item_top_map =
-      LinkedList.iterate(item_header,
-        initial_value: Map.new(),
-        action: fn p, acc ->
+      LinkedList.iterate(
+        item_header,
+        fn p, acc ->
           top = LinkedList.data(item_header, p)
 
-          LinkedList.iterate(item_lists_ll,
-            start: top,
-            initial_value: acc,
-            action: fn s, acc2 ->
+          LinkedList.iterate(
+            item_lists_ll,
+            fn s, acc2 ->
               Map.put(acc2, s, p)
-            end
+            end,
+            start: top,
+            initial_value: acc
           )
-        end
+        end,
+        initial_value: Map.new()
       )
 
     ## NOTE: we won't have to cover/uncover options, hence there is no "undoing" it
@@ -98,7 +100,7 @@ defmodule InPlace.ExactCover do
     ## as was the case for item lists.
     ##
     option_lists_ll =
-      LinkedList.new(Enum.to_list(1..entry_count), undo: false)
+      LinkedList.new(Enum.to_list(1..entry_count), restore: false)
       |> tap(fn ll ->
         Enum.each(
           option_lists,
@@ -213,7 +215,7 @@ defmodule InPlace.ExactCover do
           {:cont,
            [
              Enum.find_index(data.option_start_ids, fn val ->
-               val == option_entry
+               val in [option_entry, LinkedList.next(data.option_lists, option_entry)]
              end)
              | acc
            ]}
@@ -322,18 +324,19 @@ defmodule InPlace.ExactCover do
        ) do
     column_top = LinkedList.data(item_header, column_pointer)
 
-    LinkedList.iterate(columns,
-      start:
-        (forward? && LinkedList.next(columns, column_top)) || LinkedList.prev(columns, column_top),
-      initial_value: initial_value,
-      forward: forward?,
-      action: fn column_element, acc ->
+    LinkedList.iterate(
+      columns,
+      fn column_element, acc ->
         if column_element != column_top do
           iterator_fun.(column_element, acc)
         else
           acc
         end
-      end
+      end,
+      start:
+        (forward? && LinkedList.next(columns, column_top)) || LinkedList.prev(columns, column_top),
+      initial_value: initial_value,
+      forward: forward?
     )
   end
 
@@ -347,11 +350,12 @@ defmodule InPlace.ExactCover do
          %{option_lists: rows} = _data,
          forward? \\ true
        ) do
-    LinkedList.iterate(rows,
+    LinkedList.iterate(
+      rows,
+      fn p, acc -> iterator_fun.(p, acc) end,
       start: row_pointer,
       initial_value: initial_value,
-      forward: forward?,
-      action: fn p, acc -> iterator_fun.(p, acc) end
+      forward: forward?
     )
   end
 

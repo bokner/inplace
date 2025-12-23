@@ -60,26 +60,26 @@ defmodule InPlace.Heap do
           p_key = get_key(heap, idx)
           l_key = get_left_child_key(heap, idx)
 
-            if compare_fun.(p_key, l_key) do
-              ## heap property for left child is satisfied
-              r_key = get_right_child_key(heap, idx)
+          if compare_fun.(p_key, l_key) do
+            ## heap property for left child is satisfied
+            r_key = get_right_child_key(heap, idx)
 
-              if !r_key do
-                ## end of the tree
-                {:halt, true}
-              else
-                if compare_fun.(p_key, r_key) do
-                  ## heap property for right child satisfied
-                  {:cont, true}
-                else
-                  ## Right child violates heap property
-                  {:halt, false}
-                end
-              end
+            if !r_key do
+              ## end of the tree
+              {:halt, true}
             else
-              ## Left child violates heap property
-              {:halt, false}
+              if compare_fun.(p_key, r_key) do
+                ## heap property for right child satisfied
+                {:cont, true}
+              else
+                ## Right child violates heap property
+                {:halt, false}
+              end
             end
+          else
+            ## Left child violates heap property
+            {:halt, false}
+          end
         end)
     end
   end
@@ -108,10 +108,16 @@ defmodule InPlace.Heap do
     current_min
   end
 
-  def insert(%{capacity: capacity,
-    index_positions: index_positions,
-    position_indices: position_indices,
-    array: array} = heap, key) when is_integer(key) do
+  def insert(
+        %{
+          capacity: capacity,
+          index_positions: index_positions,
+          position_indices: position_indices,
+          array: array
+        } = heap,
+        key
+      )
+      when is_integer(key) do
     current_size = size(heap)
     if capacity == current_size, do: throw(:heap_over_capacity)
     new_size = current_size + 1
@@ -149,13 +155,17 @@ defmodule InPlace.Heap do
     Array.update(array, size_address(capacity), fn size -> size + delta end)
   end
 
-  def get_key(heap , position, heap_size \\ nil)
+  def get_key(heap, position, heap_size \\ nil)
   ## Get the external key (pointer to external data) given the position in the heap.
   def get_key(%{array: array} = heap, position, heap_size) when is_integer(position) do
     size = heap_size || size(heap)
-    if position <= size, do: Array.get(array,
-      position
-      )
+
+    if position <= size,
+      do:
+        Array.get(
+          array,
+          position
+        )
   end
 
   def get_key(heap, {:key_index, index}, heap_size) when is_integer(index) do
@@ -165,7 +175,6 @@ defmodule InPlace.Heap do
   def get_key_position(%{index_positions: positions} = _heap, index) do
     Array.get(positions, index)
   end
-
 
   defp get_left_child_key(heap, parent_position) do
     get_key(heap, left_child_position(parent_position))
@@ -211,36 +220,41 @@ defmodule InPlace.Heap do
     end
   end
 
-  defp swap_elements(%{array: array,
-    index_positions: index_positions,
-    position_indices: position_indices,
-    } = _heap, {position1, key1}, {position2, key2}) when
-      is_integer(position1) and is_integer(position2) and is_integer(key1) and is_integer(key2) do
-      Array.put(array, position1, key2)
-      Array.put(array, position2, key1)
+  defp swap_elements(
+         %{array: array, index_positions: index_positions, position_indices: position_indices} =
+           _heap,
+         {position1, key1},
+         {position2, key2}
+       )
+       when is_integer(position1) and is_integer(position2) and is_integer(key1) and
+              is_integer(key2) do
+    Array.put(array, position1, key2)
+    Array.put(array, position2, key1)
 
-      ## Update position -> key index and
-      ## key index -> position maps
-      case Array.get(position_indices, position1) do
-        nil -> :ok
-        key_index1 ->
+    ## Update position -> key index and
+    ## key index -> position maps
+    case Array.get(position_indices, position1) do
+      nil ->
+        :ok
+
+      key_index1 ->
         case Array.get(position_indices, position2) do
-          nil -> :ok
+          nil ->
+            :ok
+
           key_index2 ->
             Array.put(position_indices, position2, key_index1)
             Array.put(position_indices, position1, key_index2)
 
             Array.put(index_positions, key_index1, position2)
             Array.put(index_positions, key_index2, position1)
-          end
         end
-
+    end
   end
 
   def sift_down(heap, position) do
     sift_down(heap, position, get_key(heap, position), size(heap))
   end
-
 
   defp sift_down(%{comparator: compare_fun} = heap, position, key, size) do
     cond do
@@ -256,16 +270,16 @@ defmodule InPlace.Heap do
         right_key = valid_position?(heap, right_p, size) && get_key(heap, right_p)
 
         swap_with =
-          if compare_fun.(parent_key, left_key)  do
+          if compare_fun.(parent_key, left_key) do
             ## Rule out right child
             if right_key && !compare_fun.(parent_key, right_key) do
-                ## Right child to swap
-                {right_p, right_key}
+              ## Right child to swap
+              {right_p, right_key}
             end
           else
             ## Could be either child
             ## We know left child is `leq` than parent
-            if right_key && compare_fun.(right_key, left_key)  do
+            if right_key && compare_fun.(right_key, left_key) do
               ## Right child `leq` than left child
               {right_p, right_key}
             else

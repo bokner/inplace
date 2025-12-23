@@ -13,7 +13,7 @@ defmodule InPlace.PriorityQueueTest do
       refute Q.extract_min(q)
 
       ## Insert
-      keys =       [10, -2,  -2, 10]
+      keys = [10, -2, -2, 10]
       priorities = [2.5, 2.7, 0, 0.5]
 
       # Shuffle and insert into the Q
@@ -34,38 +34,42 @@ defmodule InPlace.PriorityQueueTest do
       ## TODO: not implemented yet
       ## assert Q.size(q) == 2
 
-      sorted = Enum.reduce_while(1..Q.size(q), [], fn _, acc ->
-        p = Q.extract_min(q)
-        p && {:cont, [p | acc]} || {:halt, acc}
-      end)
+      sorted =
+        Enum.reduce_while(1..Q.size(q), [], fn _, acc ->
+          p = Q.extract_min(q)
+          (p && {:cont, [p | acc]}) || {:halt, acc}
+        end)
 
       assert length(sorted) == 2
       assert Enum.sort_by(sorted, fn {_key, priority} -> priority end, :desc) == sorted
     end
 
     test "sorting, heapsort-style" do
+      # Enum.zip(
+      # [2, 2,    2, 3, -1, 17,    45,  19,   2,  4,   9,  -12],
+      # [2, 74.2, 0, 1,  8, 22.5, -3.7, -0.5, 4,  3.9, 5.1, 120])
       priorities =
-        # Enum.zip(
-        # [2, 2,    2, 3, -1, 17,    45,  19,   2,  4,   9,  -12],
-        # [2, 74.2, 0, 1,  8, 22.5, -3.7, -0.5, 4,  3.9, 5.1, 120])
         Enum.map(-1000..1000, fn idx -> {idx, :rand.uniform() * idx} end)
         |> Enum.shuffle()
 
-        q = Q.new(length(priorities))
+      q = Q.new(length(priorities))
       Enum.each(priorities, fn {key, priority} -> Q.insert(q, key, priority) end)
 
-      desc_sorted = Enum.reduce_while(1..length(priorities), [],
-        fn _, acc -> p = Q.extract_min(q)
-          p && {:cont, [p | acc]} || {:halt, acc} end
-      )
+      desc_sorted =
+        Enum.reduce_while(1..length(priorities), [], fn _, acc ->
+          p = Q.extract_min(q)
+          (p && {:cont, [p | acc]}) || {:halt, acc}
+        end)
 
       ## For duplicates in original priorities list,
       ## we'll leave the ones with lesser priority
-      deduped = Enum.reduce(priorities, Map.new(), fn {key, priority}, acc ->
-        Map.update(acc, key, priority, fn existing -> min(existing, priority) end)
-      end)
-      assert Enum.sort_by(deduped, fn {_key, priority} -> priority end, :desc)
-            == desc_sorted
+      deduped =
+        Enum.reduce(priorities, Map.new(), fn {key, priority}, acc ->
+          Map.update(acc, key, priority, fn existing -> min(existing, priority) end)
+        end)
+
+      assert Enum.sort_by(deduped, fn {_key, priority} -> priority end, :desc) ==
+               desc_sorted
     end
   end
 end

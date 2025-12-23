@@ -3,7 +3,7 @@ defmodule InPlace.HeapSort do
 
   def sort(list, order \\ :asc) do
     size = length(list)
-    sign = (order == :desc && 1 || -1)
+    sign = (order == :desc && 1) || -1
     heap = Heap.new(size)
     Enum.each(list, fn el -> Heap.insert(heap, sign * el) end)
     extract_all(heap, size, sign)
@@ -18,6 +18,6 @@ defmodule InPlace.HeapSort do
   end
 
   defp extract_next(heap, size, acc, sign) do
-    extract_next(heap, size - 1, [sign * Heap.extract_min(heap)| acc], sign)
+    extract_next(heap, size - 1, [sign * Heap.extract_min(heap) | acc], sign)
   end
 end
