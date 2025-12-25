@@ -114,7 +114,7 @@ defmodule InPlace.ExactCover do
       item_header: item_header,
       option_start_ids: Enum.reverse(option_start_ids),
       item_names: item_names,
-      top: item_top_map,
+      top: map_to_array(item_top_map),
       item_lists: item_lists_ll,
       option_lists: option_lists_ll,
       solution: Array.new(length(options))
@@ -125,7 +125,6 @@ defmodule InPlace.ExactCover do
          k,
          %{
            item_header: item_header,
-           top: top,
            solution: solution
          } = data,
          solver_opts,
@@ -173,7 +172,7 @@ defmodule InPlace.ExactCover do
                     # Tricky; cover/2 expects header (not item) pointer,
                     # so we need to convert
                     {columns_acc + 1,
-                     Map.get(top, j)
+                     get_top(data, j)
                      |> cover(data)
                      |> Kernel.+(entries_acc)}
 
@@ -303,7 +302,7 @@ defmodule InPlace.ExactCover do
     )
   end
 
-  ## This is for debugging only.
+  ## This variant of cover/2 is for debugging only.
   ## We won't need to pass item name/id, passing item pointer
   ## would be sufficient for the implementation
   def cover(item_name, data) do
@@ -333,6 +332,16 @@ defmodule InPlace.ExactCover do
     else
       :ok
     end
+  end
+
+  defp map_to_array(map) do
+    array = Array.new(map_size(map))
+    Enum.each(map, fn {key, value} -> Array.put(array, key, value) end)
+    array
+  end
+
+  defp get_top(data, el) do
+    Array.get(data.top, el)
   end
 
   ## `column pointer` is a pointer in `item_header` linked list.
