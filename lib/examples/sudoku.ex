@@ -20,7 +20,7 @@ defmodule InPlace.Examples.Sudoku do
     opts = Keyword.put(opts, :solution_handler, fn solution ->
       solution
       |> solution_to_sudoku(instance_array, options, d)
-      |> tap(fn solution -> check_solution(solution) |> Logger.info(label: :correct?) end)
+      |> tap(fn solution -> !check_solution(solution) && Logger.error("invalid solution") end)
       |> top_solution_handler.()
     end)
     ## Solve with exact cover
