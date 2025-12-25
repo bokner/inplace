@@ -1,6 +1,8 @@
 defmodule InPlace.ExactCoverTest do
   use ExUnit.Case
 
+  import CPSolver.Test.Helpers
+
   alias InPlace.ExactCover
 
   require Logger
@@ -124,16 +126,5 @@ defmodule InPlace.ExactCoverTest do
       end)
     end
 
-    def flush() do
-      flush([])
-    end
-
-    def flush(acc) do
-      receive do
-        msg -> flush([Enum.sort(msg) | acc])
-      after
-        0 -> acc
-      end
-    end
   end
 end

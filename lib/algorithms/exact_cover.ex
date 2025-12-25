@@ -11,12 +11,14 @@ defmodule InPlace.ExactCover do
 
   def solve(options, solver_opts \\ []) do
     data = init(options)
-    search(1, data, Keyword.merge(default_solver_opts(), solver_opts))
+    solver_opts = Keyword.merge(default_solver_opts(), solver_opts)
+    search(1, data, solver_opts, Keyword.get(solver_opts, :choose_item_fun))
   end
 
   defp default_solver_opts() do
     [
-      solution_handler: fn options -> IO.inspect(options, label: :solution) end
+      solution_handler: fn options -> IO.inspect(options, label: :solution) end,
+      choose_item_fun: fn _step, data -> first_item(data) end
     ]
   end
 
@@ -127,7 +129,7 @@ defmodule InPlace.ExactCover do
            solution: solution
          } = data,
          solver_opts,
-         choose_column_fun \\ fn _step, data -> choose_column(data) end
+         choose_item_fun
        ) do
     ## Knuth:
     # If R[h] = h, print the current solution and return.
@@ -138,7 +140,7 @@ defmodule InPlace.ExactCover do
       ## Knuth:
       # Otherwise choose a column object c (see below).
       ##
-      c = choose_column_fun.(k, data)
+      c = choose_item_fun.(k, data)
       ## Knuth:
       # Cover column c.
       ##
@@ -182,7 +184,7 @@ defmodule InPlace.ExactCover do
               data
             )
 
-          search(k + 1, data, solver_opts, choose_column_fun)
+          search(k + 1, data, solver_opts, choose_item_fun)
           ## Knuth:
           # for each j ← L[r], L[L[r]], . . . , while j != r,
           #  uncover column j.
@@ -199,8 +201,20 @@ defmodule InPlace.ExactCover do
     end
   end
 
-  defp choose_column(%{item_header: item_header} = _data) do
+  def first_item(%{item_header: item_header} = _data) do
     LinkedList.head(item_header)
+  end
+
+  def random_item(%{item_header: item_header} = _data) do
+    header_size = LinkedList.size(item_header)
+    random_position = Enum.random(1..header_size)
+    LinkedList.iterate(item_header, fn p, acc ->
+      if acc == random_position do
+        {:halt, p}
+      else
+        {:cont, acc + 1}
+      end
+    end, initial_value: 1)
   end
 
   defp solution(data, solution_handler) do
@@ -214,9 +228,18 @@ defmodule InPlace.ExactCover do
         option_entry ->
           {:cont,
            [
-             Enum.find_index(data.option_start_ids, fn val ->
-               val in [option_entry, LinkedList.next(data.option_lists, option_entry)]
-             end)
+             LinkedList.iterate(data.option_lists,
+              fn p, acc ->
+                case Enum.find_index(data.option_start_ids, fn val ->
+                  val == p
+                end) do
+                  nil -> {:cont, acc}
+                  option_number -> {:halt, option_number}
+                end
+                end,
+             start: option_entry,
+             initial_value: false
+             )
              | acc
            ]}
       end
