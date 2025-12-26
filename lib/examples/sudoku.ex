@@ -16,7 +16,7 @@ defmodule InPlace.Examples.Sudoku do
     ## Build the options for the exact cover, and some supplemental data
     %{options: options, dimension: d, instance: instance_array} = init(instance)
     ## Plug in solution handler
-    top_solution_handler = Keyword.get(opts, :solution_handler, fn s -> IO.inspect(s) end)
+    top_solution_handler = Keyword.get(opts, :solution_handler, fn s -> Logger.info(inspect(s)) end)
     opts = Keyword.put(opts, :solution_handler, fn solution ->
       solution
       |> solution_to_sudoku(instance_array, options, d)

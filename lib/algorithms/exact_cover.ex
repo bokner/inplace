@@ -18,7 +18,7 @@ defmodule InPlace.ExactCover do
   defp default_solver_opts() do
     [
       solution_handler: fn options -> IO.inspect(options, label: :solution) end,
-      choose_item_fun: fn _step, data -> first_item(data) end
+      choose_item_fun: fn _step, data -> min_options_item(data) end
     ]
   end
 
@@ -75,6 +75,7 @@ defmodule InPlace.ExactCover do
         item_lists
         |> Enum.zip((entry_count + 1)..(entry_count + num_items))
         |> Enum.each(fn {options, item_header} ->
+          ## create sublists of options per item
           LinkedList.circuit(ll, [item_header | Enum.reverse(options)])
         end)
       end)
@@ -117,7 +118,8 @@ defmodule InPlace.ExactCover do
       top: map_to_array(item_top_map),
       item_lists: item_lists_ll,
       option_lists: option_lists_ll,
-      solution: Array.new(length(options))
+      item_option_counts: create_item_option_counts(item_lists),
+      solution: Array.new(length(options)) ## buffer for building current solution
     }
   end
 
@@ -165,8 +167,8 @@ defmodule InPlace.ExactCover do
               {0, 0},
               fn j, {columns_acc, entries_acc} = acc ->
                 cond do
-                  LinkedList.empty?(item_header) ->
-                    {:halt, acc}
+                  #LinkedList.empty?(item_header) ->
+                  #  {:halt, acc}
 
                   j != r ->
                     # Tricky; cover/2 expects header (not item) pointer,
@@ -197,6 +199,7 @@ defmodule InPlace.ExactCover do
       # Uncover column c and return.
       ##
       uncover(1, num_removed_entries, data)
+      increase_option_count(data, c, num_removed_entries)
     end
   end
 
@@ -214,6 +217,19 @@ defmodule InPlace.ExactCover do
         {:cont, acc + 1}
       end
     end, initial_value: 1)
+  end
+
+  def min_options_item(%{item_header: item_header, item_option_counts: counts} = _data) do
+    LinkedList.iterate(item_header, fn p, {_min_p, min_acc} ->
+      ## find min of option counts iterating over column (item) pointers
+      case Array.get(counts, p) do
+        1 -> {:halt, {p, 1}} # it's a minimal count
+        count ->
+          {p, min(count, min_acc)}
+        end
+    end, initial_value: {nil, nil})
+    |> elem(0)
+
   end
 
   defp solution(data, solution_handler) do
@@ -285,6 +301,8 @@ defmodule InPlace.ExactCover do
             ##
             if i != j do
               LinkedList.delete_pointer(item_lists, j)
+              # and set S[C[j]]  ← S[C[j]]  − 1
+              decrease_option_count(data, j)
               acc2 + 1
             else
               acc2
@@ -293,10 +311,6 @@ defmodule InPlace.ExactCover do
           data
         )
 
-        ## Knuth:
-        # and set S[C[j]]  ← S[C[j]]  − 1
-        ## TODO: this is for tracking list sizes; important for branching
-        ## , but we'll leave it out for now.
       end,
       data
     )
@@ -334,10 +348,32 @@ defmodule InPlace.ExactCover do
     end
   end
 
+  defp decrease_option_count(data, item_option_pointer) do
+    top = get_top(data, item_option_pointer)
+    Array.update(data.item_option_counts, top, fn val -> val - 1 end)
+  end
+
+
+  def increase_option_count(data, item, number) do
+    Array.update(data.item_option_counts, item, fn val -> val + number end)
+  end
+
+
+
   defp map_to_array(map) do
     array = Array.new(map_size(map))
     Enum.each(map, fn {key, value} -> Array.put(array, key, value) end)
     array
+  end
+
+  defp create_item_option_counts(item_lists) do
+    arr = Array.new(length(item_lists))
+    item_lists
+    |> Enum.with_index(1)
+    |> Enum.each(fn {options, item_idx} ->
+      Array.put(arr, item_idx, length(options))
+    end)
+    arr
   end
 
   defp get_top(data, el) do
@@ -345,7 +381,7 @@ defmodule InPlace.ExactCover do
   end
 
   ## `column pointer` is a pointer in `item_header` linked list.
-  ## The element is points to is a 'top' of the column,
+  ## The element it points to is a 'top' of the column,
   ## which is a pointer in `item_lists` linked list
   defp iterate_column(
          column_pointer,
