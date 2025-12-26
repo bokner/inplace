@@ -16,16 +16,25 @@ defmodule InPlace.Examples.Sudoku do
   def solve(instance, opts \\ []) do
     ## Build the options for the exact cover, and some supplemental data
     %{options: options, dimension: d, instance: instance_array} = init(instance)
+    opts = Keyword.merge(default_opts(), opts)
     ## Plug in solution handler
-    top_solution_handler = Keyword.get(opts, :solution_handler, fn s -> Logger.info(inspect(s)) end)
+    top_solution_handler = Keyword.get(opts, :solution_handler)
+    checker = Keyword.get(opts, :checker)
     opts = Keyword.put(opts, :solution_handler, fn solution ->
       solution
       |> solution_to_sudoku(instance_array, options, d)
-      |> tap(fn solution -> !check_solution(solution) && Logger.error("invalid solution") end)
+      |> tap(fn solution -> checker && check_solution(solution) end)
       |> top_solution_handler.()
     end)
     ## Solve with exact cover
     ExactCover.solve(options, opts)
+  end
+
+  defp default_opts() do
+    [
+      solution_handler: fn solution -> Logger.info(solution) end,
+      checker: fn correct? -> !correct? && Logger.error("invalid solution") end
+    ]
   end
 
   def init(instance) when is_binary(instance) do
@@ -121,7 +130,6 @@ defmodule InPlace.Examples.Sudoku do
       hidden_cell?(cell) && 0 || cell_value(cell)
     end
   end
-
 
   def instance4() do
     "1000231000020200"

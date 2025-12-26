@@ -47,6 +47,7 @@ defmodule InPlace.LinkedList do
 
     %{
       capacity: size,
+      size: Array.new(1, 0),
       ## mode (:singly_linked or :doubly_linked)
       mode: mode,
       ## circular?
@@ -118,8 +119,12 @@ defmodule InPlace.LinkedList do
     head(list) == @terminator
   end
 
-  def size(%{restore: restore?, capacity: capacity, free: free} = list) do
-    capacity - Stack.size(free) - ((restore? && Stack.size(list.removed)) || 0)
+  def size(list) do
+    Array.get(list.size, 1)
+  end
+
+  def inc_size(list, delta) do
+    Array.update(list.size, 1, fn s -> s + delta end)
   end
 
   def available(list) do
@@ -184,7 +189,7 @@ defmodule InPlace.LinkedList do
         set_head(list, (size(list) == 1 && @terminator) || next_pointer)
       end
 
-      apply_restore_strategy(list, pointer)
+      dispose_or_hide(list, pointer)
     end
   end
 
@@ -196,22 +201,28 @@ defmodule InPlace.LinkedList do
   end
 
   defp allocate(list) do
-    Stack.pop(list.free) || throw(:list_over_capacity)
-  end
-
-  defp apply_restore_strategy(list, pointer) do
-    if list.restore do
-      store_removal(list, pointer)
+    if size(list) == list.capacity do
+      throw(:list_over_capacity)
     else
-      deallocate(list, pointer)
+      inc_size(list, 1)
+      Stack.pop(list.free)
     end
   end
 
-  defp deallocate(list, pointer) do
+  defp dispose_or_hide(list, pointer) do
+    inc_size(list, -1)
+    if list.restore do
+      hide(list, pointer)
+    else
+      dispose(list, pointer)
+    end
+  end
+
+  defp dispose(list, pointer) do
     Stack.push(list.free, pointer)
   end
 
-  defp store_removal(list, pointer) do
+  defp hide(list, pointer) do
     Stack.push(list.removed, pointer)
   end
 
@@ -221,7 +232,7 @@ defmodule InPlace.LinkedList do
         false
 
       restored_pointer ->
-        restore(list, restored_pointer)
+        restore_pointer(list, restored_pointer)
         {:restored, restored_pointer}
     end
   end
@@ -230,7 +241,7 @@ defmodule InPlace.LinkedList do
     throw(:restore_disabled)
   end
 
-  def restore(%{restore: true} = list, pointer) do
+  def restore_pointer(%{restore: true} = list, pointer) do
     next_pointer = next(list, pointer)
     prev_pointer = prev(list, pointer)
     set_prev(list, next_pointer, pointer)
@@ -252,10 +263,12 @@ defmodule InPlace.LinkedList do
         :ok
     end
 
+    inc_size(list, 1)
+
     :ok
   end
 
-  def restore(_list, _pointer) do
+  def restore_pointer(_list, _pointer) do
     throw(:restore_disabled)
   end
 

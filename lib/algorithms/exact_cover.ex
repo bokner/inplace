@@ -112,14 +112,15 @@ defmodule InPlace.ExactCover do
         )
       end)
 
+    top = map_to_array(item_top_map)
     %{
       item_header: item_header,
       option_start_ids: Enum.reverse(option_start_ids),
       item_names: item_names,
-      top: map_to_array(item_top_map),
+      top: top,
       item_lists: item_lists_ll,
       option_lists: option_lists_ll,
-      item_option_counts: create_item_option_counts(item_lists),
+      item_option_counts: init_item_option_counts(item_lists),
       num_solutions: Array.new(1, 0),
       solution: Array.new(length(options)) ## buffer for building current solution
     }
@@ -183,7 +184,8 @@ defmodule InPlace.ExactCover do
                     {columns_acc + 1,
                      get_top(data, j)
                      |> cover(data)
-                     |> Kernel.+(entries_acc)}
+                     |> Kernel.+(entries_acc)
+                    }
 
                   true ->
                     acc
@@ -226,17 +228,23 @@ end
     end, initial_value: 1)
   end
 
-  def min_options_item(%{item_header: item_header, item_option_counts: counts} = _data) do
+  def min_options_item(%{item_header: item_header} = data) do
+    head = LinkedList.head(item_header)
+    head_count = get_item_options_count(data, head)
     LinkedList.iterate(item_header, fn p, {_min_p, min_acc} ->
       ## find min of option counts iterating over column (item) pointers
-      case Array.get(counts, p) do
-        1 -> {:halt, {p, 1}} # it's a minimal count
-        count ->
+      case get_item_options_count(data, p) do
+        count when count <= 1 -> {:halt, {p, 1}} # it's a minimal count
+        count  ->
           {p, min(count, min_acc)}
         end
-    end, initial_value: {nil, nil})
+    end, initial_value: {head, head_count})
     |> elem(0)
 
+  end
+
+  defp get_item_options_count(data, item_pointer) do
+    Array.get(data.item_option_counts, item_pointer)
   end
 
   defp solution(data, solution_handler) do
@@ -385,18 +393,22 @@ end
     array
   end
 
-  defp create_item_option_counts(item_lists) do
+  defp init_item_option_counts(item_lists) do
     arr = Array.new(length(item_lists))
     item_lists
     |> Enum.with_index(1)
     |> Enum.each(fn {options, item_idx} ->
       Array.put(arr, item_idx, length(options))
-    end)
+          end)
     arr
   end
 
-  defp get_top(data, el) do
-    Array.get(data.top, el)
+  defp get_top(%{top: top} = _data, el) do
+    get_top(top, el)
+  end
+
+  defp get_top(top, el) do
+    Array.get(top, el)
   end
 
   ## `column pointer` is a pointer in `item_header` linked list.
