@@ -28,7 +28,7 @@ defmodule InPlace.Examples.SudokuTest do
         Sudoku.solve(instance, solution_handler: async_solution_handler())
         solutions = flush()
         length(solutions) == 1 &&
-        Enum.all?(solutions, &Sudoku.check_solution/1)
+        Sudoku.check_solution(hd(solutions))
       end)
     end
 
