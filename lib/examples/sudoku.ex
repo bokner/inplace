@@ -3,7 +3,8 @@ defmodule InPlace.Examples.Sudoku do
   Sudoku puzzle.
   The instance of puzzle is a string of DxD length
   , where D is a dimension of Sudoku puzzle (would be 9 by default).
-  The values 1 to 9 represent pre-filled cells.
+  The values 1 to 9 represent pre-filled cells (clues, givens etc...);
+  any other values represent hidden cells.
   """
   alias InPlace.ExactCover
   require Logger
@@ -16,7 +17,7 @@ defmodule InPlace.Examples.Sudoku do
     ## Build the options for the exact cover, and some supplemental data
     %{options: options, dimension: d, instance: instance_array} = init(instance)
     ## Plug in solution handler
-    top_solution_handler = Keyword.get(opts, :solution_handler, fn s -> IO.inspect(s) end)
+    top_solution_handler = Keyword.get(opts, :solution_handler, fn s -> Logger.info(inspect(s)) end)
     opts = Keyword.put(opts, :solution_handler, fn solution ->
       solution
       |> solution_to_sudoku(instance_array, options, d)

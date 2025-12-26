@@ -12,13 +12,14 @@ defmodule InPlace.ExactCover do
   def solve(options, solver_opts \\ []) do
     data = init(options)
     solver_opts = Keyword.merge(default_solver_opts(), solver_opts)
-    search(1, data, solver_opts, Keyword.get(solver_opts, :choose_item_fun))
+    search(1, Map.put(data, :solver_opts, solver_opts))
   end
 
   defp default_solver_opts() do
     [
       solution_handler: fn options -> IO.inspect(options, label: :solution) end,
-      choose_item_fun: fn _step, data -> first_item(data) end
+      choose_item_fun: fn _step, data -> min_options_item(data) end,
+      stop_on: fn data -> num_solutions(data) == 1 end
     ]
   end
 
@@ -75,6 +76,7 @@ defmodule InPlace.ExactCover do
         item_lists
         |> Enum.zip((entry_count + 1)..(entry_count + num_items))
         |> Enum.each(fn {options, item_header} ->
+          ## create sublists of options per item
           LinkedList.circuit(ll, [item_header | Enum.reverse(options)])
         end)
       end)
@@ -114,10 +116,12 @@ defmodule InPlace.ExactCover do
       item_header: item_header,
       option_start_ids: Enum.reverse(option_start_ids),
       item_names: item_names,
-      top: item_top_map,
+      top: map_to_array(item_top_map),
       item_lists: item_lists_ll,
       option_lists: option_lists_ll,
-      solution: Array.new(length(options))
+      item_option_counts: create_item_option_counts(item_lists),
+      num_solutions: Array.new(1, 0),
+      solution: Array.new(length(options)) ## buffer for building current solution
     }
   end
 
@@ -125,12 +129,16 @@ defmodule InPlace.ExactCover do
          k,
          %{
            item_header: item_header,
-           top: top,
-           solution: solution
-         } = data,
-         solver_opts,
-         choose_item_fun
+           solution: solution,
+           solver_opts: solver_opts
+         } = data
        ) do
+
+    stop_condition = solver_opts[:stop_on]
+    if stop_condition && stop_condition.(data) do
+      :complete
+    else
+      choose_item_fun = solver_opts[:choose_item_fun]
     ## Knuth:
     # If R[h] = h, print the current solution and return.
     ##
@@ -166,14 +174,14 @@ defmodule InPlace.ExactCover do
               {0, 0},
               fn j, {columns_acc, entries_acc} = acc ->
                 cond do
-                  LinkedList.empty?(item_header) ->
-                    {:halt, acc}
+                  #LinkedList.empty?(item_header) ->
+                  #  {:halt, acc}
 
                   j != r ->
                     # Tricky; cover/2 expects header (not item) pointer,
                     # so we need to convert
                     {columns_acc + 1,
-                     Map.get(top, j)
+                     get_top(data, j)
                      |> cover(data)
                      |> Kernel.+(entries_acc)}
 
@@ -184,7 +192,7 @@ defmodule InPlace.ExactCover do
               data
             )
 
-          search(k + 1, data, solver_opts, choose_item_fun)
+          search(k + 1, data)
           ## Knuth:
           # for each j ← L[r], L[L[r]], . . . , while j != r,
           #  uncover column j.
@@ -200,6 +208,7 @@ defmodule InPlace.ExactCover do
       uncover(1, num_removed_entries, data)
     end
   end
+end
 
   def first_item(%{item_header: item_header} = _data) do
     LinkedList.head(item_header)
@@ -217,8 +226,23 @@ defmodule InPlace.ExactCover do
     end, initial_value: 1)
   end
 
+  def min_options_item(%{item_header: item_header, item_option_counts: counts} = _data) do
+    LinkedList.iterate(item_header, fn p, {_min_p, min_acc} ->
+      ## find min of option counts iterating over column (item) pointers
+      case Array.get(counts, p) do
+        1 -> {:halt, {p, 1}} # it's a minimal count
+        count ->
+          {p, min(count, min_acc)}
+        end
+    end, initial_value: {nil, nil})
+    |> elem(0)
+
+  end
+
   defp solution(data, solution_handler) do
     solution = data[:solution]
+
+    Array.update(data.num_solutions, 1, fn n -> n + 1 end)
 
     Enum.reduce_while(1..Array.size(solution), [], fn idx, acc ->
       case Array.get(solution, idx) do
@@ -245,6 +269,10 @@ defmodule InPlace.ExactCover do
       end
     end)
     |> solution_handler.()
+  end
+
+  def num_solutions(data) do
+    Array.get(data.num_solutions, 1)
   end
 
   ## `column_pointer` is a pointer to
@@ -286,6 +314,8 @@ defmodule InPlace.ExactCover do
             ##
             if i != j do
               LinkedList.delete_pointer(item_lists, j)
+              # and set S[C[j]]  ← S[C[j]]  − 1
+              decrease_option_count(data, j)
               acc2 + 1
             else
               acc2
@@ -294,16 +324,12 @@ defmodule InPlace.ExactCover do
           data
         )
 
-        ## Knuth:
-        # and set S[C[j]]  ← S[C[j]]  − 1
-        ## TODO: this is for tracking list sizes; important for branching
-        ## , but we'll leave it out for now.
       end,
       data
     )
   end
 
-  ## This is for debugging only.
+  ## This variant of cover/2 is for debugging only.
   ## We won't need to pass item name/id, passing item pointer
   ## would be sufficient for the implementation
   def cover(item_name, data) do
@@ -316,27 +342,65 @@ defmodule InPlace.ExactCover do
          %{
            item_header: item_header,
            item_lists: item_lists
-         } = _data
+         } = data
        )
        when is_integer(num_columns) and is_integer(num_entries) do
     restore(num_columns, item_header)
-    restore(num_entries, item_lists)
+    restore(num_entries, item_lists, fn p ->
+      increase_option_count(data, p)
+    end)
   end
 
-  defp restore(0, _linked_list) do
+  defp restore(num_to_restore, linked_list, post_process_fun \\ nil)
+
+  defp restore(0, _linked_list, _post_process_fun) do
     :ok
   end
 
-  defp restore(n, linked_list) do
-    if LinkedList.restore(linked_list) do
-      restore(n - 1, linked_list)
-    else
-      :ok
+  defp restore(n, linked_list, post_process_fun) do
+    case LinkedList.restore(linked_list) do
+      false -> :ok
+      {:restored, p} ->
+        post_process_fun && post_process_fun.(p)
+        restore(n - 1, linked_list, post_process_fun)
     end
   end
 
+  defp decrease_option_count(data, item_option_pointer) do
+    top = get_top(data, item_option_pointer)
+    Array.update(data.item_option_counts, top, fn val -> val - 1 end)
+  end
+
+
+  def increase_option_count(data, item_option_pointer) do
+    top = get_top(data, item_option_pointer)
+    Array.update(data.item_option_counts, top, fn val -> val + 1 end)
+  end
+
+
+
+  defp map_to_array(map) do
+    array = Array.new(map_size(map))
+    Enum.each(map, fn {key, value} -> Array.put(array, key, value) end)
+    array
+  end
+
+  defp create_item_option_counts(item_lists) do
+    arr = Array.new(length(item_lists))
+    item_lists
+    |> Enum.with_index(1)
+    |> Enum.each(fn {options, item_idx} ->
+      Array.put(arr, item_idx, length(options))
+    end)
+    arr
+  end
+
+  defp get_top(data, el) do
+    Array.get(data.top, el)
+  end
+
   ## `column pointer` is a pointer in `item_header` linked list.
-  ## The element is points to is a 'top' of the column,
+  ## The element it points to is a 'top' of the column,
   ## which is a pointer in `item_lists` linked list
   defp iterate_column(
          column_pointer,

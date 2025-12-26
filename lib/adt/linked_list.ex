@@ -222,6 +222,7 @@ defmodule InPlace.LinkedList do
 
       restored_pointer ->
         restore(list, restored_pointer)
+        {:restored, restored_pointer}
     end
   end
 
