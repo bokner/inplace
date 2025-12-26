@@ -32,7 +32,7 @@ defmodule InPlace.Examples.Sudoku do
 
   defp default_opts() do
     [
-      solution_handler: fn solution -> Logger.info(solution) end,
+      solution_handler: fn solution -> Logger.info(inspect(solution)) end,
       checker: fn correct? -> !correct? && Logger.error("invalid solution") end
     ]
   end
