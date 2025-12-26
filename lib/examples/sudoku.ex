@@ -3,7 +3,8 @@ defmodule InPlace.Examples.Sudoku do
   Sudoku puzzle.
   The instance of puzzle is a string of DxD length
   , where D is a dimension of Sudoku puzzle (would be 9 by default).
-  The values 1 to 9 represent pre-filled cells.
+  The values 1 to 9 represent pre-filled cells (clues, givens etc...);
+  any other values represent hidden cells.
   """
   alias InPlace.ExactCover
   require Logger

@@ -12,13 +12,14 @@ defmodule InPlace.ExactCover do
   def solve(options, solver_opts \\ []) do
     data = init(options)
     solver_opts = Keyword.merge(default_solver_opts(), solver_opts)
-    search(1, data, solver_opts, Keyword.get(solver_opts, :choose_item_fun))
+    search(1, Map.put(data, :solver_opts, solver_opts))
   end
 
   defp default_solver_opts() do
     [
       solution_handler: fn options -> IO.inspect(options, label: :solution) end,
-      choose_item_fun: fn _step, data -> min_options_item(data) end
+      choose_item_fun: fn _step, data -> min_options_item(data) end,
+      stop_on: fn data -> num_solutions(data) == 1 end
     ]
   end
 
@@ -119,6 +120,7 @@ defmodule InPlace.ExactCover do
       item_lists: item_lists_ll,
       option_lists: option_lists_ll,
       item_option_counts: create_item_option_counts(item_lists),
+      num_solutions: Array.new(1, 0),
       solution: Array.new(length(options)) ## buffer for building current solution
     }
   end
@@ -127,11 +129,16 @@ defmodule InPlace.ExactCover do
          k,
          %{
            item_header: item_header,
-           solution: solution
-         } = data,
-         solver_opts,
-         choose_item_fun
+           solution: solution,
+           solver_opts: solver_opts
+         } = data
        ) do
+
+    stop_condition = solver_opts[:stop_on]
+    if stop_condition && stop_condition.(data) do
+      :complete
+    else
+      choose_item_fun = solver_opts[:choose_item_fun]
     ## Knuth:
     # If R[h] = h, print the current solution and return.
     ##
@@ -185,7 +192,7 @@ defmodule InPlace.ExactCover do
               data
             )
 
-          search(k + 1, data, solver_opts, choose_item_fun)
+          search(k + 1, data)
           ## Knuth:
           # for each j ← L[r], L[L[r]], . . . , while j != r,
           #  uncover column j.
@@ -199,9 +206,9 @@ defmodule InPlace.ExactCover do
       # Uncover column c and return.
       ##
       uncover(1, num_removed_entries, data)
-      increase_option_count(data, c, num_removed_entries)
     end
   end
+end
 
   def first_item(%{item_header: item_header} = _data) do
     LinkedList.head(item_header)
@@ -235,6 +242,8 @@ defmodule InPlace.ExactCover do
   defp solution(data, solution_handler) do
     solution = data[:solution]
 
+    Array.update(data.num_solutions, 1, fn n -> n + 1 end)
+
     Enum.reduce_while(1..Array.size(solution), [], fn idx, acc ->
       case Array.get(solution, idx) do
         nil ->
@@ -260,6 +269,10 @@ defmodule InPlace.ExactCover do
       end
     end)
     |> solution_handler.()
+  end
+
+  def num_solutions(data) do
+    Array.get(data.num_solutions, 1)
   end
 
   ## `column_pointer` is a pointer to
@@ -329,22 +342,27 @@ defmodule InPlace.ExactCover do
          %{
            item_header: item_header,
            item_lists: item_lists
-         } = _data
+         } = data
        )
        when is_integer(num_columns) and is_integer(num_entries) do
     restore(num_columns, item_header)
-    restore(num_entries, item_lists)
+    restore(num_entries, item_lists, fn p ->
+      increase_option_count(data, p)
+    end)
   end
 
-  defp restore(0, _linked_list) do
+  defp restore(num_to_restore, linked_list, post_process_fun \\ nil)
+
+  defp restore(0, _linked_list, _post_process_fun) do
     :ok
   end
 
-  defp restore(n, linked_list) do
-    if LinkedList.restore(linked_list) do
-      restore(n - 1, linked_list)
-    else
-      :ok
+  defp restore(n, linked_list, post_process_fun) do
+    case LinkedList.restore(linked_list) do
+      false -> :ok
+      {:restored, p} ->
+        post_process_fun && post_process_fun.(p)
+        restore(n - 1, linked_list, post_process_fun)
     end
   end
 
@@ -354,8 +372,9 @@ defmodule InPlace.ExactCover do
   end
 
 
-  def increase_option_count(data, item, number) do
-    Array.update(data.item_option_counts, item, fn val -> val + number end)
+  def increase_option_count(data, item_option_pointer) do
+    top = get_top(data, item_option_pointer)
+    Array.update(data.item_option_counts, top, fn val -> val + 1 end)
   end
 
 
