@@ -77,7 +77,7 @@ defmodule InPlace.ExactCover do
         |> Enum.zip((entry_count + 1)..(entry_count + num_items))
         |> Enum.each(fn {options, item_header} ->
           ## create sublists of options per item
-          LinkedList.circuit(ll, [item_header | Enum.reverse(options)])
+          LinkedList.circuit(ll, [item_header | options])
         end)
       end)
 
@@ -354,6 +354,7 @@ end
        )
        when is_integer(num_columns) and is_integer(num_entries) do
     restore(num_columns, item_header)
+
     restore(num_entries, item_lists, fn p ->
       increase_option_count(data, p)
     end)

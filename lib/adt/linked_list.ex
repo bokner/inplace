@@ -233,7 +233,6 @@ defmodule InPlace.LinkedList do
 
       restored_pointer ->
         restore_pointer(list, restored_pointer)
-        {:restored, restored_pointer}
     end
   end
 
@@ -265,7 +264,8 @@ defmodule InPlace.LinkedList do
 
     inc_size(list, 1)
 
-    :ok
+    {:restored, pointer}
+
   end
 
   def restore_pointer(_list, _pointer) do
