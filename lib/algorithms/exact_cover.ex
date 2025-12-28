@@ -229,23 +229,7 @@ end
     end, initial_value: 1)
   end
 
-  def min_options_item(data) do
-    min_options_item(data, :list)
-  end
-
-  def min_options_item(%{item_header: item_header} = data, :heap) do
-    queue = data.item_option_counts.queue
-    {key, _priority} = PriorityQueue.get_min(queue)
-    if LinkedList.pointer_deleted?(item_header, key) do
-       PriorityQueue.extract_min(queue)
-       min_options_item(data)
-    else
-      key
-    end
-  end
-
-
-  def min_options_item(%{item_header: item_header} = data, :list) do
+  def min_options_item(%{item_header: item_header} = data) do
     head = LinkedList.head(item_header)
     head_count = get_item_options_count(data, head)
     LinkedList.iterate(item_header, fn p, {_min_p, min_acc} ->
@@ -315,12 +299,6 @@ end
         } = data
       )
       when is_integer(column_pointer) and column_pointer > 0 do
-
-    ## Set option count for covered item to max,
-    ## so it never appears as "minimum" item
-    # PriorityQueue.insert(data.item_option_counts.queue,
-    #  column_pointer,
-    #  LinkedList.size(item_header) + 1)
     ## Knuth:
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
@@ -372,14 +350,11 @@ end
          num_entries,
          %{
            item_header: item_header,
-           item_lists: item_lists,
-           item_option_counts: %{counts: counts, copy: counts_copy, queue: queue}
+           item_lists: item_lists
          } = data
        )
        when is_integer(num_columns) and is_integer(num_entries) do
-    restore(num_columns, item_header, fn p -> p
-      #PriorityQueue.insert(queue, p, Array.get(counts_copy, p))
-    end)
+    restore(num_columns, item_header)
 
     restore(num_entries, item_lists, fn p ->
       increase_option_count(data, p)
@@ -416,7 +391,7 @@ end
     Array.update(counts, top,
       fn val ->
         (val + delta)
-        #|> tap(fn priority -> PriorityQueue.insert(queue, top, priority) end)
+        |> tap(fn priority -> PriorityQueue.insert(queue, top, priority) end)
     end)
   end
 
@@ -433,18 +408,15 @@ end
   defp init_item_option_counts(item_lists) do
     num_items = length(item_lists)
     arr = Array.new(num_items)
-    copy = Array.new(num_items)
     p_queue = PriorityQueue.new(num_items, keep_lesser: false)
     item_lists
     |> Enum.with_index(1)
     |> Enum.each(fn {options, item_idx} ->
       num_options = length(options)
       Array.put(arr, item_idx, num_options)
-      Array.put(copy, item_idx, num_options)
-
       PriorityQueue.insert(p_queue, item_idx, num_options)
           end)
-    %{counts: arr, copy: copy, queue: p_queue}
+    %{counts: arr, queue: p_queue}
   end
 
   defp get_top(%{top: top} = _data, el) do
