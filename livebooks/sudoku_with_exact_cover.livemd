@@ -1,0 +1,161 @@
+# Sudoku with exact cover
+
+```elixir
+Mix.install(
+  [{:inplace, path: Path.join(System.get_env("HOME"), "projects/inplace")},
+    :kino
+  ]
+)
+
+
+Logger.configure(level: :notice)
+
+defmodule RenderHTML do
+  use Kino.JS
+
+  def new(html) when is_binary(html) do
+    Kino.JS.new(__MODULE__, html)
+  end
+
+  asset "main.js" do
+    """
+    export function init(ctx, html) {
+      ctx.root.innerHTML = html;
+    }
+    """
+  end
+
+  ## Sudoku rendering
+  ## Grid is NxN array
+  def render_sudoku(grid) when is_list(hd(grid)) do
+    header = """
+    <div id="sudoku">
+    """
+
+    body = Enum.reduce(grid, "", fn row, acc -> acc <> row_to_string(row) end)
+
+    footer = """
+    </div>
+    """
+
+    ## Render
+    new(header <> body <> footer)
+  end
+
+  def render_sudoku(str) when is_binary(str) do
+    for <<cell <- str>> do
+      case cell - 48 do
+        n when n in 1..9 -> n
+          _n -> 0  
+      end
+    end
+    |> render_sudoku()
+  end
+  
+  def render_sudoku(array1d) when is_list(array1d) do
+    dim = floor(:math.sqrt(length(array1d)))    
+    Enum.chunk_every(array1d, dim)
+    |> render_sudoku()
+  end
+
+  defp row_to_string(row) do
+    "<div>\n" <> Enum.map_join(row, "\n", fn cell -> sudoku_cell(cell) end) <> "\n</div>"
+  end
+
+  defp sudoku_cell(value) do
+    """
+    <input style="background: white;
+      width: 30px;
+      height: 30px;
+      color: blue;
+      border: 2px solid;
+      font-size: 20px;
+      font-weight: bold;
+      text-align: center;" maxlength="1" size="1" value="#{(value == 0 && "") || value}" disabled="">
+    """
+  end
+end
+```
+
+## Puzzle
+
+```elixir
+alias InPlace.Examples.Sudoku
+
+puzzle =
+  #"48.3............71.2.......7.5....6....2..8.............1.76...3.....4......5...."
+  #"000500301400020000000000000260001000000300900004000080090700000000080040600000000"
+  ## slow :list, fast :heap
+  #"000800004010020000092000000300600087000000050000090000000400200700005000000000100"
+  #"760040000000000801000500000000100200040000050030000000108600000000090030200000000"
+  #"200000700000000010000400000500600200980000000000300000010080040030001000000090500"
+  #"030070000000000102000000600000005040600000030100600000050210000007000800004000000"
+  "400000601020800000000000000001250000600000900000008030030500080700090000000000000"
+
+RenderHTML.render_sudoku(puzzle)
+
+
+```
+
+## Solution
+
+```elixir
+{tc, solution} = :timer.tc(fn -> Sudoku.solve(puzzle, 
+  checker: false,
+  choose_item_fun: fn _, data -> InPlace.ExactCover.min_options_item(data) end,
+  solution_handler: fn s -> send(self(), s) end) end)
+
+solution = receive do
+  msg -> msg
+end
+
+if Sudoku.check_solution(solution) do
+  IO.puts("Solution is correct, solved in #{div(tc, 1000)} ms")
+else
+  IO.puts("Solution is incorrect")  
+end
+
+RenderHTML.render_sudoku(solution)
+
+
+
+```
+
+## Benchmark
+
+```elixir
+puzzle_file = 
+  "data/sudoku/clue17"
+  #"data/sudoku/top95"
+  #"data/sudoku/hardest"
+  #"data/sudoku/puzzles5_forum_hardest_1905_11+"
+  #"data/sudoku/quasi_uniform_834"
+num_instances = 100_000
+puzzles = File.read!(Path.join("/Users/bokner/projects/cpsolver", puzzle_file)) 
+  |> String.split("\n") |> Enum.take(-num_instances)
+
+res = Enum.map(Enum.with_index(puzzles, 1), fn {p, idx} -> 
+  {tc, _} = 
+  :timer.tc(fn -> Sudoku.solve(p, checker: false, 
+    choose_item_fun: fn _, data -> InPlace.ExactCover.min_options_item(data) end,
+    solution_handler: fn _ -> :ok end) end)
+  |> tap(fn {tc, _idx} -> IO.puts("#{idx} : #{round(tc/1000)} ms") end)
+
+  {tc, idx}
+  end)
+
+times = Enum.map(res, fn {time, _idx} -> time end) |> Enum.sort()
+stats = %{shortest: Enum.min(times), 
+  longest: Enum.max(times), 
+  average: Enum.sum(times) / length(times), 
+  total: Enum.sum(times),
+  sorted: Enum.sort(times),
+  median: Enum.at(times, div(length(times), 2))
+}
+```
+
+```elixir
+{duration, idx} = Enum.max_by(res, fn {time, _idx} -> time end)
+longest = Enum.at(puzzles, idx - 1)
+{duration, longest}
+```
