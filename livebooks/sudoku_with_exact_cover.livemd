@@ -158,6 +158,8 @@ stats = %{shortest: Enum.min(times),
 }
 ```
 
+## Slowest instance
+
 ```elixir
 {duration, idx} = Enum.max_by(res, fn {time, _idx} -> time end)
 longest = Enum.at(puzzles, idx - 1)
