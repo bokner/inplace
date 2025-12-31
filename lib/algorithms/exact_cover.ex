@@ -12,7 +12,11 @@ defmodule InPlace.ExactCover do
   def solve(options, solver_opts \\ []) do
     state = init(options)
     solver_opts = Keyword.merge(default_solver_opts(), solver_opts)
-    search(1, Map.put(state, :solver_opts, solver_opts))
+    try do
+      search(1, Map.put(state, :solver_opts, solver_opts))
+    catch :complete ->
+      :ok
+    end
   end
 
   defp default_solver_opts() do
@@ -139,7 +143,7 @@ defmodule InPlace.ExactCover do
     stop_condition = solver_opts[:stop_on]
 
     if stop_condition && stop_condition.(state) do
-      :complete
+      throw(:complete)
     else
       choose_item_fun = solver_opts[:choose_item_fun]
       ## Knuth:
@@ -174,14 +178,13 @@ defmodule InPlace.ExactCover do
               #  cover column j
               ##
               #{_num_covered_columns, _num_removed_entries} =
-                cover_option_columns(r, state)
+              cover_option_columns(r, state)
               search(k + 1, state)
               ## Knuth:
               # for each j ← L[r], L[L[r]], . . . , while j != r,
               #  uncover column j.
               ##
               uncover_option_columns(r, state)
-
               #uncover(r, num_covered_columns, num_removed_entries, state)
               #uncover(r, )
             end,
