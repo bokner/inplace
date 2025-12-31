@@ -5,27 +5,27 @@ defmodule InPlace.ExactCover do
 
   Note: there is a never version of this algorithm
   (The Art of Computer Programming, vol. 4B, by Donald Knuth).
-  It differs mostly by using more advanced internal data structure.
+  It differs mostly by using more advanced internal state structure.
   """
   alias InPlace.{LinkedList, Array}
 
   def solve(options, solver_opts \\ []) do
-    data = init(options)
+    state = init(options)
     solver_opts = Keyword.merge(default_solver_opts(), solver_opts)
-    search(1, Map.put(data, :solver_opts, solver_opts))
+    search(1, Map.put(state, :solver_opts, solver_opts))
   end
 
   defp default_solver_opts() do
     [
       solution_handler: fn options -> IO.inspect(options, label: :solution) end,
-      choose_item_fun: fn _step, data -> min_options_item(data) end,
-      stop_on: fn data -> num_solutions(data) == 1 end
+      choose_item_fun: fn _step, state -> min_options_item(state) end,
+      stop_on: fn state -> num_solutions(state) == 1 end
     ]
   end
 
   def init(options) do
     ## Options are sets that contain item names.
-    ## Build the data structures (roughly as described by D. Knuth)
+    ## Build the state structures (roughly as described by D. Knuth)
     {item_map, entry_count, option_lists, option_start_ids} =
       Enum.reduce(options, {Map.new(), 0, [], []}, fn option,
                                                       {directory, entry_idx, option_items,
@@ -67,11 +67,11 @@ defmodule InPlace.ExactCover do
           ## a (17, 1, 8) circuit.
           header_idx + entry_count
         end),
-        restore: true
+        deletion: :hide
       )
 
     item_lists_ll =
-      LinkedList.new(Enum.to_list(1..(entry_count + num_items)), restore: true)
+      LinkedList.new(Enum.to_list(1..(entry_count + num_items)), deletion: :hide)
       |> tap(fn ll ->
         item_lists
         |> Enum.zip((entry_count + 1)..(entry_count + num_items))
@@ -104,7 +104,7 @@ defmodule InPlace.ExactCover do
     ## as was the case for item lists.
     ##
     option_lists_ll =
-      LinkedList.new(Enum.to_list(1..entry_count), restore: false)
+      LinkedList.new(Enum.to_list(1..entry_count), deletion: :hide)
       |> tap(fn ll ->
         Enum.each(
           option_lists,
@@ -113,6 +113,7 @@ defmodule InPlace.ExactCover do
       end)
 
     top = map_to_array(item_top_map)
+
     %{
       item_header: item_header,
       option_start_ids: Enum.reverse(option_start_ids),
@@ -122,7 +123,8 @@ defmodule InPlace.ExactCover do
       option_lists: option_lists_ll,
       item_option_counts: init_item_option_counts(item_lists),
       num_solutions: Array.new(1, 0),
-      solution: Array.new(length(options)) ## buffer for building current solution
+      ## buffer for building current solution
+      solution: Array.new(length(options))
     }
   end
 
@@ -132,125 +134,161 @@ defmodule InPlace.ExactCover do
            item_header: item_header,
            solution: solution,
            solver_opts: solver_opts
-         } = data
+         } = state
        ) do
-
     stop_condition = solver_opts[:stop_on]
-    if stop_condition && stop_condition.(data) do
+
+    if stop_condition && stop_condition.(state) do
       :complete
     else
       choose_item_fun = solver_opts[:choose_item_fun]
-    ## Knuth:
-    # If R[h] = h, print the current solution and return.
-    ##
-    if LinkedList.empty?(item_header) do
-      solution(data, Keyword.get(solver_opts, :solution_handler))
-    else
       ## Knuth:
-      # Otherwise choose a column object c (see below).
+      # If R[h] = h, print the current solution and return.
       ##
-      c = choose_item_fun.(k, data)
-      ## Knuth:
-      # Cover column c.
-      ##
-      num_removed_entries = cover(c, data)
-      ## Knuth:
-      # For each r ← D[c], D[D[c]], . . . , while r != c,
-      ##
-      iterate_column(
-        c,
-        nil,
-        fn r, _acc ->
-          ## Knuth:
-          #   set O[k] ← r;
-          ##
-          Array.put(solution, k, r)
-          ## Knuth:
-          # for each j ← R[r], R[R[r]], . . . , while j != r,
-          #  cover column j
-          ##
-          {num_covered_columns, num_removed_entries} =
-            iterate_row(
-              r,
-              {0, 0},
-              fn j, {columns_acc, entries_acc} = acc ->
-                cond do
-                  #LinkedList.empty?(item_header) ->
-                  #  {:halt, acc}
+      if LinkedList.empty?(item_header) do
+        solution(state, Keyword.get(solver_opts, :solution_handler))
+      else
+        ## Knuth:
+        # Otherwise choose a column object c (see below).
+        ##
+        c = choose_item_fun.(k, state)
+        ## Knuth:
+        # Cover column c.
+        ##
+        # |> IO.inspect(label: :cover_top)
+        num_removed_entries = cover(c, state)
+        if num_removed_entries > 0 do
+        ## Knuth:
+        # For each r ← D[c], D[D[c]], . . . , while r != c,
+        ##
 
-                  j != r ->
-                    # Tricky; cover/2 expects header (not item) pointer,
-                    # so we need to convert
-                    {columns_acc + 1,
-                     get_top(data, j)
-                     |> cover(data)
-                     |> Kernel.+(entries_acc)
-                    }
+          iterate_column(
+            c,
+            fn r ->
+              ## Knuth:
+              #   set O[k] ← r;
+              ##
+              add_to_solution(solution, k, r)
+              ## Knuth:
+              # for each j ← R[r], R[R[r]], . . . , while j != r,
+              #  cover column j
+              ##
+              #{_num_covered_columns, _num_removed_entries} =
+                cover_option_columns(r, state)
+              search(k + 1, state)
+              ## Knuth:
+              # for each j ← L[r], L[L[r]], . . . , while j != r,
+              #  uncover column j.
+              ##
+              uncover_option_columns(r, state)
 
-                  true ->
-                    acc
-                end
-              end,
-              data
-            )
+              #uncover(r, num_covered_columns, num_removed_entries, state)
+              #uncover(r, )
+            end,
+            state
+          )
+        end
 
-          search(k + 1, data)
-          ## Knuth:
-          # for each j ← L[r], L[L[r]], . . . , while j != r,
-          #  uncover column j.
-          ##
-          uncover(num_covered_columns, num_removed_entries, data)
-        end,
-        data
-      )
-
-      ## Knuth:
-      # Uncover column c and return.
-      ##
-      uncover(1, num_removed_entries, data)
+        ## Knuth:
+        # Uncover column c and return.
+        ##
+        uncover(c, state)
+      end
     end
   end
-end
 
-  def first_item(%{item_header: item_header} = _data) do
+  defp cover_option_columns(option_pointer, state) do
+    iterate_row(
+      option_pointer,
+      fn j ->
+        cond do
+          j != option_pointer ->
+            # Tricky; cover/2 expects header (not item) pointer,
+            # so we need to convert
+              get_top(state, j)
+              |> cover(state)
+
+          true ->
+            :ok
+        end
+      end,
+      state
+    )
+  end
+
+  defp uncover_option_columns(option_pointer, state) do
+    iterate_row(
+      option_pointer,
+      fn j ->
+        cond do
+          j != option_pointer ->
+            # Tricky; cover/2 expects header (not item) pointer,
+            # so we need to convert
+              get_top(state, j)
+              |> uncover(state)
+          true ->
+            :ok
+        end
+      end,
+      state, false
+    )
+  end
+
+  def first_item(%{item_header: item_header} = _state) do
     LinkedList.head(item_header)
   end
 
-  def random_item(%{item_header: item_header} = _data) do
+  def random_item(%{item_header: item_header} = _state) do
     header_size = LinkedList.size(item_header)
     random_position = Enum.random(1..header_size)
-    LinkedList.iterate(item_header, fn p, acc ->
-      if acc == random_position do
-        {:halt, p}
-      else
-        {:cont, acc + 1}
-      end
-    end, initial_value: 1)
-  end
 
-  def min_options_item(%{item_header: item_header} = data) do
-    head = LinkedList.head(item_header)
-    head_count = get_item_options_count(data, head)
-    LinkedList.iterate(item_header, fn p, {_min_p, min_acc} ->
-      ## find min of option counts iterating over column (item) pointers
-      case get_item_options_count(data, p) do
-        count when count <= 1 -> {:halt, {p, 1}} # it's a minimal count
-        count  ->
-          {p, min(count, min_acc)}
+    LinkedList.iterate(
+      item_header,
+      fn p, acc ->
+        if acc == random_position do
+          {:halt, p}
+        else
+          {:cont, acc + 1}
         end
-    end, initial_value: {head, head_count})
+      end,
+      initial_value: 1
+    )
+  end
+
+  def min_options_item(%{item_header: item_header} = state) do
+    head = LinkedList.head(item_header)
+    head_count = get_item_options_count(state, head)
+
+    LinkedList.iterate(
+      item_header,
+      fn p, {_min_p, min_acc} ->
+        ## find min of option counts iterating over column (item) pointers
+        case get_item_options_count(state, p) do
+          # it's a minimal count
+          count when count <= 1 ->
+            {:halt, {p, count}}
+
+          count ->
+            {p, min(count, min_acc)}
+        end
+      end,
+      initial_value: {head, head_count}
+    )
     |> elem(0)
-
   end
 
-  defp get_item_options_count(data, item_pointer) do
-    Array.get(data.item_option_counts, item_pointer)
+  defp get_item_options_count(state, item_pointer) do
+    Array.get(state.item_option_counts, item_pointer)
   end
 
-  defp solution(data, solution_handler) do
-    solution = data[:solution]
+  defp add_to_solution(solution, step, item) do
+    Array.put(solution, step, item)
+  end
 
-    Array.update(data.num_solutions, 1, fn n -> n + 1 end)
+  defp solution(state, solution_handler) do
+    solution = state[:solution]
+
+    Array.update(state.num_solutions, 1, fn n -> n + 1 end)
 
     Enum.reduce_while(1..Array.size(solution), [], fn idx, acc ->
       case Array.get(solution, idx) do
@@ -260,17 +298,18 @@ end
         option_entry ->
           {:cont,
            [
-             LinkedList.iterate(data.option_lists,
-              fn p, acc ->
-                case Enum.find_index(data.option_start_ids, fn val ->
-                  val == p
-                end) do
-                  nil -> {:cont, acc}
-                  option_number -> {:halt, option_number}
-                end
-                end,
-             start: option_entry,
-             initial_value: false
+             LinkedList.iterate(
+               state.option_lists,
+               fn p, acc ->
+                 case Enum.find_index(state.option_start_ids, fn val ->
+                        val == p
+                      end) do
+                   nil -> {:cont, acc}
+                   option_number -> {:halt, option_number}
+                 end
+               end,
+               start: option_entry,
+               initial_value: false
              )
              | acc
            ]}
@@ -279,8 +318,8 @@ end
     |> solution_handler.()
   end
 
-  def num_solutions(data) do
-    Array.get(data.num_solutions, 1)
+  def num_solutions(state) do
+    Array.get(state.num_solutions, 1)
   end
 
   ## `column_pointer` is a pointer to
@@ -295,7 +334,7 @@ end
         %{
           item_header: item_header,
           item_lists: item_lists
-        } = data
+        } = state
       )
       when is_integer(column_pointer) and column_pointer > 0 do
     ## Knuth:
@@ -308,84 +347,87 @@ end
     iterate_column(
       column_pointer,
       ## count of removed entries
-      0,
       ## Knuth:
       # For each j ← R[i], R[R[i]] , . . . , while j != i,
       ##
-      fn i, acc ->
+      fn i ->
         iterate_row(
           i,
-          acc,
-          fn j, acc2 ->
+          fn j ->
             ## Knuth:
             # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
             ##
             if i != j do
               LinkedList.delete_pointer(item_lists, j)
               # and set S[C[j]]  ← S[C[j]]  − 1
-              decrease_option_count(data, j)
-              acc2 + 1
-            else
-              acc2
+              decrease_option_count(state, j)
             end
           end,
-          data
+          state
         )
-
       end,
-      data
+      state
     )
   end
 
   ## This variant of cover/2 is for debugging only.
   ## We won't need to pass item name/id, passing item pointer
   ## would be sufficient for the implementation
-  def cover(item_name, data) do
-    cover(column_pointer(item_name, data), data)
-  end
-
-  defp uncover(
-         num_columns,
-         num_entries,
-         %{
-           item_header: item_header,
-           item_lists: item_lists
-         } = data
-       )
-       when is_integer(num_columns) and is_integer(num_entries) do
-    restore(num_columns, item_header)
-    restore(num_entries, item_lists, fn p ->
-      increase_option_count(data, p)
-    end)
-  end
-
-  defp restore(num_to_restore, linked_list, post_process_fun \\ nil)
-
-  defp restore(0, _linked_list, _post_process_fun) do
-    :ok
-  end
-
-  defp restore(n, linked_list, post_process_fun) do
-    case LinkedList.restore(linked_list) do
-      false -> :ok
-      {:restored, p} ->
-        post_process_fun && post_process_fun.(p)
-        restore(n - 1, linked_list, post_process_fun)
-    end
-  end
-
-  defp decrease_option_count(data, item_option_pointer) do
-    top = get_top(data, item_option_pointer)
-    Array.update(data.item_option_counts, top, fn val -> val - 1 end)
+  def cover(item_name, state) do
+    cover(column_pointer(item_name, state), state)
   end
 
 
-  def increase_option_count(data, item_option_pointer) do
-    top = get_top(data, item_option_pointer)
-    Array.update(data.item_option_counts, top, fn val -> val + 1 end)
+  def uncover(
+        column_pointer,
+        %{
+          item_header: item_header,
+          item_lists: item_lists
+        } = state
+      )
+      when is_integer(column_pointer) and column_pointer > 0 do
+    ## Knuth:
+    # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
+    ##
+    LinkedList.restore_pointer(item_header, column_pointer)
+    ## Knuth:
+    #  For each i ← D[c], D[D[c]] , . . . , while i != c,
+    ##
+    iterate_column(
+      column_pointer,
+      ## count of removed entries
+      ## Knuth:
+      # For each j ← R[i], R[R[i]] , . . . , while j != i,
+      ##
+      fn i ->
+        iterate_row(
+          i,
+          fn j ->
+            ## Knuth:
+            # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
+            ##
+            if i != j do
+              LinkedList.restore_pointer(item_lists, j)
+              # and set S[C[j]]  ← S[C[j]]  − 1
+              increase_option_count(state, j)
+            end
+          end,
+          state, false
+        )
+      end,
+      state, false
+    )
   end
 
+  defp decrease_option_count(state, item_option_pointer) do
+    top = get_top(state, item_option_pointer)
+    Array.update(state.item_option_counts, top, fn val -> val - 1 end)
+  end
 
+  def increase_option_count(state, item_option_pointer) do
+    top = get_top(state, item_option_pointer)
+    Array.update(state.item_option_counts, top, fn val -> val + 1 end)
+  end
 
   defp map_to_array(map) do
     array = Array.new(map_size(map))
@@ -395,15 +437,17 @@ end
 
   defp init_item_option_counts(item_lists) do
     arr = Array.new(length(item_lists))
+
     item_lists
     |> Enum.with_index(1)
     |> Enum.each(fn {options, item_idx} ->
       Array.put(arr, item_idx, length(options))
-          end)
+    end)
+
     arr
   end
 
-  defp get_top(%{top: top} = _data, el) do
+  defp get_top(%{top: top} = _state, el) do
     get_top(top, el)
   end
 
@@ -416,25 +460,21 @@ end
   ## which is a pointer in `item_lists` linked list
   defp iterate_column(
          column_pointer,
-         initial_value,
          iterator_fun,
-         %{item_header: item_header, item_lists: columns} = _data,
+         %{item_header: item_header, item_lists: columns} = _state,
          forward? \\ true
        ) do
     column_top = LinkedList.data(item_header, column_pointer)
 
     LinkedList.iterate(
       columns,
-      fn column_element, acc ->
+      fn column_element ->
         if column_element != column_top do
-          iterator_fun.(column_element, acc)
-        else
-          acc
+          iterator_fun.(column_element)
         end
       end,
       start:
         (forward? && LinkedList.next(columns, column_top)) || LinkedList.prev(columns, column_top),
-      initial_value: initial_value,
       forward: forward?
     )
   end
@@ -444,21 +484,19 @@ end
   ## , each sublist represents an option.
   defp iterate_row(
          row_pointer,
-         initial_value,
          iterator_fun,
-         %{option_lists: rows} = _data,
+         %{option_lists: rows} = _state,
          forward? \\ true
        ) do
     LinkedList.iterate(
       rows,
-      fn p, acc -> iterator_fun.(p, acc) end,
+      fn p -> iterator_fun.(p) end,
       start: row_pointer,
-      initial_value: initial_value,
       forward: forward?
     )
   end
 
-  defp column_pointer(item_name, %{item_names: item_names} = _data) do
+  defp column_pointer(item_name, %{item_names: item_names} = _state) do
     length(item_names) -
       Enum.find_index(item_names, fn name -> name == item_name end)
   end
