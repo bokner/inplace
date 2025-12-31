@@ -7,7 +7,7 @@ defmodule InPlace.ExactCover do
   (The Art of Computer Programming, vol. 4B, by Donald Knuth).
   It differs mostly by using more advanced internal data structure.
   """
-  alias InPlace.{LinkedList, Array}
+  alias InPlace.{LinkedList, Array, PriorityQueue}
 
   def solve(options, solver_opts \\ []) do
     data = init(options)
@@ -77,9 +77,10 @@ defmodule InPlace.ExactCover do
         |> Enum.zip((entry_count + 1)..(entry_count + num_items))
         |> Enum.each(fn {options, item_header} ->
           ## create sublists of options per item
-          LinkedList.circuit(ll, [item_header | Enum.reverse(options)])
+          LinkedList.circuit(ll, [item_header | options])
         end)
       end)
+
 
     item_top_map =
       LinkedList.iterate(
@@ -228,7 +229,25 @@ end
     end, initial_value: 1)
   end
 
-  def min_options_item(%{item_header: item_header} = data) do
+  def min_options_item(data) do
+    min_options_item(data, :heap)
+  end
+
+  def min_options_item(%{item_header: item_header} = data, :heap) do
+    queue = data.item_option_counts.queue
+      case PriorityQueue.extract_min(queue) do
+        {key, _priority} ->
+    if LinkedList.pointer_deleted?(item_header, key) do
+       min_options_item(data)
+    else
+      key
+    end
+    nil -> min_options_item(data, :list)
+  end
+  end
+
+
+  def min_options_item(%{item_header: item_header} = data, :list) do
     head = LinkedList.head(item_header)
     head_count = get_item_options_count(data, head)
     LinkedList.iterate(item_header, fn p, {_min_p, min_acc} ->
@@ -244,7 +263,7 @@ end
   end
 
   defp get_item_options_count(data, item_pointer) do
-    Array.get(data.item_option_counts, item_pointer)
+    Array.get(data.item_option_counts.counts, item_pointer)
   end
 
   defp solution(data, solution_handler) do
@@ -375,17 +394,28 @@ end
   end
 
   defp decrease_option_count(data, item_option_pointer) do
-    top = get_top(data, item_option_pointer)
-    Array.update(data.item_option_counts, top, fn val -> val - 1 end)
+    change_option_count(data, item_option_pointer, -1)
   end
-
 
   def increase_option_count(data, item_option_pointer) do
-    top = get_top(data, item_option_pointer)
-    Array.update(data.item_option_counts, top, fn val -> val + 1 end)
+    change_option_count(data, item_option_pointer, 1)
   end
 
-
+  # Updates item option count
+  defp change_option_count(%{item_option_counts: counts_rec} = data, item_option_pointer, delta) do
+    top = get_top(data, item_option_pointer)
+    if LinkedList.pointer_deleted?(data.item_header, top) do
+      :ignore
+    else
+    %{counts: counts, queue: queue} = counts_rec
+    Array.update(counts, top,
+      fn val ->
+        (val + delta)
+        |> tap(fn priority ->
+           PriorityQueue.insert(queue, top, priority) end)
+    end)
+  end
+  end
 
   defp map_to_array(map) do
     array = Array.new(map_size(map))
@@ -394,13 +424,20 @@ end
   end
 
   defp init_item_option_counts(item_lists) do
-    arr = Array.new(length(item_lists))
+    num_items = length(item_lists)
+    arr = Array.new(num_items)
+    copy = Array.new(num_items)
+    p_queue = PriorityQueue.new(num_items, keep_lesser: false)
     item_lists
     |> Enum.with_index(1)
     |> Enum.each(fn {options, item_idx} ->
-      Array.put(arr, item_idx, length(options))
+      num_options = length(options)
+      Array.put(arr, item_idx, num_options)
+      Array.put(copy, item_idx, num_options)
+
+      PriorityQueue.insert(p_queue, item_idx, num_options)
           end)
-    arr
+    %{counts: arr, copy: copy, queue: p_queue}
   end
 
   defp get_top(%{top: top} = _data, el) do

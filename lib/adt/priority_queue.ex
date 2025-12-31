@@ -8,6 +8,8 @@ defmodule InPlace.PriorityQueue do
     where the 2nd element defines the priority on the 1st element.
     Options:
     :comparator - the boolean function that compares 2 priorities (default is Kernel.</2)
+    :keep_lesser - `insert/2,3` will ignore new priority for the key if it's not strictly
+    less (as decided by comparator) than the current one (default is `true`)
   """
   def new(capacity, opts \\ []) do
     opts = Keyword.merge(default_opts(), opts)
@@ -53,8 +55,12 @@ defmodule InPlace.PriorityQueue do
         insert_new(p_queue, key, priority)
 
       {existing_key, current_priority, key_index} ->
-        ## new priority is strictly less then the current one
-        if !Keyword.get(opts, :comparator).(current_priority, priority) do
+        keep_lesser = Keyword.get(opts, :keep_lesser)
+        ## current priority is strictly less then the new one,
+        ## and we want to keep the lesser
+        if keep_lesser && Keyword.get(opts, :comparator).(current_priority, priority) do
+          {existing_key, current_priority}
+        else
           update_mapping(mapping, existing_key, priority, key_index)
           Heap.sift_up(heap, Heap.get_key_position(heap, key_index))
         end
@@ -104,7 +110,8 @@ defmodule InPlace.PriorityQueue do
 
   defp default_opts() do
     [
-      comparator: &Kernel.<=/2
+      comparator: &Kernel.<=/2,
+      keep_lesser: true
     ]
   end
 
