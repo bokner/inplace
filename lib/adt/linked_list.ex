@@ -8,16 +8,17 @@ defmodule InPlace.LinkedList do
     - `mode` :: :singly_linked | :doubly_linked
     - `circular` :: boolean()
       optional, `false` by default;
-    - `reclaim` :: boolean()
-      Handles if the element can be restored after removal (see delete_pointer/2).
-      `true` - element can not be restored, the place occupied by it can be reclaimed
-        (we will add the pointer to the removed element to the list of free pointers);
-      `false` - the element will be "hidden" by connecting prior and next elements of that element.
+    - `deletion` :: :reclaim | :hide | :rewind
+      Handles if the element pointer could be restored later (see delete_pointer/2), and how
+      to restore it:
+      `:reclaim` (default) - element can not be restored, the pointer will be put back to the `allocation` pool;
+      `:hide` - element can be restored by re-linking with it's former `left` and `right` neighbors;
        The element stays in the list, but can not be reached
        except by directly addressed by it's pointer. The element can be put back to it's position
        by reconnecting previously prior and next elements back to that element (see hide/2 and restore/2);
-        Additionally, supports 'removal history', which could be used to "rewind" removals
-        in reverse order (see restore/1).
+      `:rewind` - if specified, the special stack of removed element pointers is maintained.
+        The effect of removal will be the same as for  :hide, except that
+        The elements can be restored in the reverse order of their removal by using `rewind/1`.
     - `:mapper_fun`  # maps data entries to application data
       optional, &Function.identity/1 by default
   """
@@ -39,7 +40,7 @@ defmodule InPlace.LinkedList do
     opts = Keyword.merge(default_opts(), opts)
     mode = Keyword.get(opts, :mode)
     circular? = Keyword.get(opts, :circular)
-    restore? = Keyword.get(opts, :restore)
+    deletion_mode = Keyword.get(opts, :deletion)
 
     if mode not in [@singly_linked_mode, @doubly_linked_mode] do
       throw({:error, {:unknown_mode, mode}})
@@ -52,8 +53,8 @@ defmodule InPlace.LinkedList do
       mode: mode,
       ## circular?
       circular: circular?,
-      ## Option to "undo" removals; see restore/1
-      restore: restore?,
+      ## Option to handle removals
+      deletion: deletion_mode,
       ## holds the pointer to the first element of the list
       handle: init_handle(mode),
       # pointers (links) to the next element
@@ -68,7 +69,7 @@ defmodule InPlace.LinkedList do
       mapper_fun: Keyword.get(opts, :mapper_fun)
     }
     |> then(fn state ->
-      if restore? do
+      if deletion_mode == :rewind do
         Map.put(state, :removed, Stack.new(size))
       else
         state
@@ -82,7 +83,7 @@ defmodule InPlace.LinkedList do
     [
       mode: @doubly_linked_mode,
       circular: true,
-      restore: false,
+      deletion: :reclaim,
       mapper_fun: &Function.identity/1
     ]
   end
@@ -100,7 +101,7 @@ defmodule InPlace.LinkedList do
 
   ## The stack for tracking 'free' indices
   ## They can be reused after the element is removed from linked list
-  ## (unless `restore=true`, which disables reuse).
+  ## (unless `deletion in [:hide, :rewind]`, which disables reuse).
   defp init_free(size) when is_integer(size) do
     ref = Stack.new(size)
     Enum.each(size..1//-1, fn idx -> Stack.push(ref, idx) end)
@@ -194,10 +195,8 @@ defmodule InPlace.LinkedList do
   end
 
   def pointer_deleted?(list, pointer) do
-    if list.restore do
       empty?(list) ||
         pointer != prev(list, next(list, pointer))
-    end
   end
 
   defp allocate(list) do
@@ -209,12 +208,15 @@ defmodule InPlace.LinkedList do
     end
   end
 
-  defp dispose_or_hide(list, pointer) do
+  defp dispose_or_hide(%{deletion: deletion_mode} = list, pointer) do
     inc_size(list, -1)
-    if list.restore do
-      hide(list, pointer)
-    else
-      dispose(list, pointer)
+    case deletion_mode do
+      :hide ->
+        :ok
+      :reclaim ->
+        dispose(list, pointer)
+      :rewind ->
+        hide(list, pointer)
     end
   end
 
@@ -226,7 +228,7 @@ defmodule InPlace.LinkedList do
     Stack.push(list.removed, pointer)
   end
 
-  def restore(%{restore: true, removed: removed} = list) do
+  def rewind(%{deletion: :rewind, removed: removed} = list) do
     case Stack.pop(removed) do
       nil ->
         false
@@ -237,11 +239,11 @@ defmodule InPlace.LinkedList do
     end
   end
 
-  def restore(_list) do
-    throw(:restore_disabled)
+  def rewind(_list) do
+    throw(:rewind_disabled)
   end
 
-  def restore_pointer(%{restore: true} = list, pointer) do
+  def restore_pointer(%{deletion: deletion_mode} = list, pointer) when deletion_mode in [:hide, :rewind] do
     next_pointer = next(list, pointer)
     prev_pointer = prev(list, pointer)
     set_prev(list, next_pointer, pointer)
@@ -252,8 +254,8 @@ defmodule InPlace.LinkedList do
     ## - the list is empty
     ## - there is no more pointers in `removed` stack
     cond do
-      Stack.empty?(list.removed) ->
-        set_head(list, 1)
+      deletion_mode == :rewind && Stack.empty?(list.removed) ->
+         set_head(list, 1)
 
       head(list) in [@terminator, next_pointer] ->
         ## We replace head with the restored pointer

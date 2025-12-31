@@ -44,7 +44,7 @@ defmodule InPlace.LinkedListTest do
     end
 
     test "iterator (side effects)" do
-      ll = LinkedList.new(10, circular: true, mode: :doubly_linked, restore: true)
+      ll = LinkedList.new(10, circular: true, mode: :doubly_linked, deletion: :hide)
       Enum.each(1..10, fn value -> LinkedList.append(ll, value) end)
       assert LinkedList.size(ll) == 10
 
@@ -143,7 +143,7 @@ defmodule InPlace.LinkedListTest do
     end
 
     test "delete pointers" do
-      dllc = LinkedList.new(10, restore: true)
+      dllc = LinkedList.new(10, deletion: :hide)
       Enum.each(1..4, fn value -> LinkedList.append(dllc, value) end)
       assert [1, 2, 3, 4] == LinkedList.to_list(dllc)
       head = LinkedList.head(dllc)
@@ -165,8 +165,8 @@ defmodule InPlace.LinkedListTest do
       assert LinkedList.empty?(dllc)
     end
 
-    test "restore pointers" do
-      dllc = LinkedList.new(10, restore: true)
+    test "restore pointers by 'rewindind'" do
+      dllc = LinkedList.new(10, deletion: :rewind)
       n = 4
       ## Fill the list...
       Enum.each(1..n, fn value -> LinkedList.append(dllc, value) end)
@@ -181,7 +181,7 @@ defmodule InPlace.LinkedListTest do
       assert Enum.empty?(LinkedList.to_list(dllc))
       assert LinkedList.size(dllc) == 0
       ## ..restore removed elements
-      Enum.each(1..n, fn _idx -> LinkedList.restore(dllc) end)
+      Enum.each(1..n, fn _idx -> LinkedList.rewind(dllc) end)
       ## Values restored
       assert values == LinkedList.to_list(dllc)
 
