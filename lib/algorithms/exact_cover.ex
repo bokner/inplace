@@ -205,8 +205,8 @@ defmodule InPlace.ExactCover do
           j != option_pointer ->
             # Tricky; cover/2 expects header (not item) pointer,
             # so we need to convert
-            get_top(state, j)
-            |> cover(state)
+              get_top(state, j)
+              |> cover(state)
 
           true ->
             :ok
@@ -279,7 +279,7 @@ defmodule InPlace.ExactCover do
       initial_value: {head, head_count}
     )
     |> elem(0)
-    |> tap(fn p -> IO.inspect({p, Heap.get_min(state.item_option_counts.heap)}, label: :match) end)
+    #|> tap(fn p -> IO.inspect({p, Heap.get_min(state.item_option_counts.heap)}, label: :match) end)
   end
 
   def min_options_item(%{item_option_counts: %{heap: heap}, item_header: item_header} = state, :heap) do
@@ -437,33 +437,31 @@ defmodule InPlace.ExactCover do
   end
 
   defp decrease_option_count(state, item_option_pointer) do
-    update_option_count(state, item_option_pointer,
+    update_option_count(state, get_top(state, item_option_pointer),
       fn val -> val - 1 end, false)
   end
 
   defp increase_option_count(state, item_option_pointer) do
-    update_option_count(state, item_option_pointer,
+    update_option_count(state, get_top(state, item_option_pointer),
       fn val -> val + 1 end, true)
   end
 
-  defp restore_option_counts(state, item_option_pointer) do
-    update_option_count(state, item_option_pointer, fn _val ->
-      top = get_top(state, item_option_pointer)
-      Array.get(state.item_option_counts.copy, top)
+  defp restore_option_counts(state, item_top) do
+    update_option_count(state, item_top, fn _val ->
+      Array.get(state.item_option_counts.copy, item_top)
     end, false)
   end
 
-  defp hide_option_counts(state, item_option_pointer) do
-    update_option_count(state, item_option_pointer, fn _val ->
+  defp hide_option_counts(state, item_top) do
+    update_option_count(state, item_top, fn _val ->
       Array.inf()
     end, true)
   end
 
-  defp update_option_count(%{item_option_counts: %{counts: option_counts, heap: heap}} = state, item_option_pointer, update_fun, increase?) do
-    top = get_top(state, item_option_pointer)
-    Array.update(state.item_option_counts.counts, top, update_fun)
+  defp update_option_count(%{item_option_counts: %{counts: option_counts, heap: heap}} = state, item_top, update_fun, increase?) do
+    Array.update(option_counts, item_top, update_fun)
     ## Maintain min_heap
-    key_position = Heap.get_key_position(heap, top)
+    key_position = Heap.get_key_position(heap, item_top)
     if increase? do
       Heap.sift_down(heap, key_position)
     else
