@@ -3,11 +3,8 @@ defmodule InPlace.ExactCover do
   Implementation of Algorithm DLX (Exact cover via dancing links).
   Based on https://arxiv.org/pdf/cs/0011047 by Donald Knuth.
 
-  Note: there is a never version of this algorithm
-  (The Art of Computer Programming, vol. 4B, by Donald Knuth).
-  It differs mostly by using more advanced internal state structure.
   """
-  alias InPlace.{LinkedList, Array}
+  alias InPlace.{LinkedList, Array, Heap}
 
   def solve(options, solver_opts \\ []) do
     state = init(options)
@@ -208,8 +205,8 @@ defmodule InPlace.ExactCover do
           j != option_pointer ->
             # Tricky; cover/2 expects header (not item) pointer,
             # so we need to convert
-              get_top(state, j)
-              |> cover(state)
+            get_top(state, j)
+            |> cover(state)
 
           true ->
             :ok
@@ -258,7 +255,11 @@ defmodule InPlace.ExactCover do
     )
   end
 
-  def min_options_item(%{item_header: item_header} = state) do
+  def min_options_item(state) do
+    min_options_item(state, :sequence)
+  end
+
+  def min_options_item(%{item_header: item_header} = state, :sequence) do
     head = LinkedList.head(item_header)
     head_count = get_item_options_count(state, head)
 
@@ -278,10 +279,21 @@ defmodule InPlace.ExactCover do
       initial_value: {head, head_count}
     )
     |> elem(0)
+    |> tap(fn p -> IO.inspect({p, Heap.get_min(state.item_option_counts.heap)}, label: :match) end)
+  end
+
+  def min_options_item(%{item_option_counts: %{heap: heap}, item_header: item_header} = state, :heap) do
+    _candidate_item = Heap.get_min(state.item_option_counts.heap)
+    # if LinkedList.pointer_deleted?(item_header, candidate_item) do
+    #   Heap.extract_min(heap)
+    #   min_options_item(state, :heap)
+    # else
+    #   candidate_item
+    # end
   end
 
   defp get_item_options_count(state, item_pointer) do
-    Array.get(state.item_option_counts, item_pointer)
+    Array.get(state.item_option_counts.counts, item_pointer)
   end
 
   defp add_to_solution(solution, step, item) do
@@ -344,6 +356,7 @@ defmodule InPlace.ExactCover do
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
     LinkedList.delete_pointer(item_header, column_pointer)
+    #hide_option_counts(state, column_pointer)
     ## Knuth:
     #  For each i ← D[c], D[D[c]] , . . . , while i != c,
     ##
@@ -363,7 +376,7 @@ defmodule InPlace.ExactCover do
             if i != j do
               LinkedList.delete_pointer(item_lists, j)
               # and set S[C[j]]  ← S[C[j]]  − 1
-              decrease_option_count(state, j)
+              #decrease_option_count(state, j)
             end
           end,
           state
@@ -385,7 +398,7 @@ defmodule InPlace.ExactCover do
         column_pointer,
         %{
           item_header: item_header,
-          item_lists: item_lists
+          item_lists: item_lists,
         } = state
       )
       when is_integer(column_pointer) and column_pointer > 0 do
@@ -393,6 +406,7 @@ defmodule InPlace.ExactCover do
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
     LinkedList.restore_pointer(item_header, column_pointer)
+    #restore_option_counts(state, column_pointer)
     ## Knuth:
     #  For each i ← D[c], D[D[c]] , . . . , while i != c,
     ##
@@ -412,7 +426,7 @@ defmodule InPlace.ExactCover do
             if i != j do
               LinkedList.restore_pointer(item_lists, j)
               # and set S[C[j]]  ← S[C[j]]  − 1
-              increase_option_count(state, j)
+              #increase_option_count(state, j)
             end
           end,
           state, false
@@ -423,13 +437,38 @@ defmodule InPlace.ExactCover do
   end
 
   defp decrease_option_count(state, item_option_pointer) do
-    top = get_top(state, item_option_pointer)
-    Array.update(state.item_option_counts, top, fn val -> val - 1 end)
+    update_option_count(state, item_option_pointer,
+      fn val -> val - 1 end, false)
   end
 
-  def increase_option_count(state, item_option_pointer) do
+  defp increase_option_count(state, item_option_pointer) do
+    update_option_count(state, item_option_pointer,
+      fn val -> val + 1 end, true)
+  end
+
+  defp restore_option_counts(state, item_option_pointer) do
+    update_option_count(state, item_option_pointer, fn _val ->
+      top = get_top(state, item_option_pointer)
+      Array.get(state.item_option_counts.copy, top)
+    end, false)
+  end
+
+  defp hide_option_counts(state, item_option_pointer) do
+    update_option_count(state, item_option_pointer, fn _val ->
+      Array.inf()
+    end, true)
+  end
+
+  defp update_option_count(%{item_option_counts: %{counts: option_counts, heap: heap}} = state, item_option_pointer, update_fun, increase?) do
     top = get_top(state, item_option_pointer)
-    Array.update(state.item_option_counts, top, fn val -> val + 1 end)
+    Array.update(state.item_option_counts.counts, top, update_fun)
+    ## Maintain min_heap
+    key_position = Heap.get_key_position(heap, top)
+    if increase? do
+      Heap.sift_down(heap, key_position)
+    else
+      Heap.sift_up(heap, key_position)
+    end
   end
 
   defp map_to_array(map) do
@@ -439,15 +478,27 @@ defmodule InPlace.ExactCover do
   end
 
   defp init_item_option_counts(item_lists) do
-    arr = Array.new(length(item_lists))
+    num_items = length(item_lists)
+    option_counts = Array.new(num_items)
+    count_copy = Array.new(num_items)
+    min_heap = Heap.new(num_items,
+      ## Compare 2 items associated with key1 and key2 by the size of
+      ## their uncovered options.
+      comparator: fn key1, key2 ->
+      Array.get(option_counts, key1) < Array.get(option_counts, key2)
+    end)
 
     item_lists
     |> Enum.with_index(1)
     |> Enum.each(fn {options, item_idx} ->
-      Array.put(arr, item_idx, length(options))
+      num_options = length(options)
+      Array.put(option_counts, item_idx, num_options)
+      Array.put(count_copy, item_idx, num_options)
+
+      Heap.insert(min_heap, item_idx)
     end)
 
-    arr
+    %{counts: option_counts, heap: min_heap, copy: count_copy}
   end
 
   defp get_top(%{top: top} = _state, el) do

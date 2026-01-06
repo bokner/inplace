@@ -65,4 +65,16 @@ defmodule InPlace.Array do
   def size(array) do
     :atomics.info(array)[:size]
   end
+
+  def null() do
+    @null
+  end
+
+  def inf() do
+    null() - 1
+  end
+
+  def negative_inf() do
+    -inf()
+  end
 end
