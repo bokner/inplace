@@ -12,7 +12,6 @@ defmodule InPlace.Examples.SudokuTest do
       assert length(solutions) == 2
       assert Enum.all?(solutions, &Sudoku.check_solution/1)
     end
-
   end
 
   describe "9x9" do
@@ -25,11 +24,12 @@ defmodule InPlace.Examples.SudokuTest do
 
     test "'hard' and 'clue17'" do
       assert Enum.all?([hard(), clue17()], fn instance ->
-        Sudoku.solve(instance, solution_handler: async_solution_handler())
-        solutions = flush()
-        length(solutions) == 1 &&
-        Sudoku.check_solution(hd(solutions))
-      end)
+               Sudoku.solve(instance, solution_handler: async_solution_handler())
+               solutions = flush()
+
+               length(solutions) == 1 &&
+                 Sudoku.check_solution(hd(solutions))
+             end)
     end
 
     defp hard() do
@@ -44,6 +44,4 @@ defmodule InPlace.Examples.SudokuTest do
   defp async_solution_handler() do
     fn solution -> send(self(), solution) end
   end
-
-
 end

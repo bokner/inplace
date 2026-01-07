@@ -195,8 +195,8 @@ defmodule InPlace.LinkedList do
   end
 
   def pointer_deleted?(list, pointer) do
-      empty?(list) ||
-        pointer != prev(list, next(list, pointer))
+    empty?(list) ||
+      pointer != prev(list, next(list, pointer))
   end
 
   defp allocate(list) do
@@ -210,11 +210,14 @@ defmodule InPlace.LinkedList do
 
   defp dispose_or_hide(%{deletion: deletion_mode} = list, pointer) do
     inc_size(list, -1)
+
     case deletion_mode do
       :hide ->
         :ok
+
       :reclaim ->
         dispose(list, pointer)
+
       :rewind ->
         hide(list, pointer)
     end
@@ -243,7 +246,8 @@ defmodule InPlace.LinkedList do
     throw(:rewind_disabled)
   end
 
-  def restore_pointer(%{deletion: deletion_mode} = list, pointer) when deletion_mode in [:hide, :rewind] do
+  def restore_pointer(%{deletion: deletion_mode} = list, pointer)
+      when deletion_mode in [:hide, :rewind] do
     next_pointer = next(list, pointer)
     prev_pointer = prev(list, pointer)
     set_prev(list, next_pointer, pointer)
@@ -255,7 +259,7 @@ defmodule InPlace.LinkedList do
     ## - there is no more pointers in `removed` stack
     cond do
       deletion_mode == :rewind && Stack.empty?(list.removed) ->
-         set_head(list, 1)
+        set_head(list, 1)
 
       head(list) in [@terminator, next_pointer] ->
         ## We replace head with the restored pointer

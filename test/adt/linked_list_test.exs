@@ -56,6 +56,7 @@ defmodule InPlace.LinkedListTest do
         LinkedList.delete_pointer(ll, p)
         assert LinkedList.pointer_deleted?(ll, p)
       end)
+
       assert LinkedList.empty?(ll)
       assert Enum.empty?(LinkedList.to_list(ll))
     end

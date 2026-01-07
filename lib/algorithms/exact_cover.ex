@@ -12,10 +12,12 @@ defmodule InPlace.ExactCover do
   def solve(options, solver_opts \\ []) do
     state = init(options)
     solver_opts = Keyword.merge(default_solver_opts(), solver_opts)
+
     try do
       search(1, Map.put(state, :solver_opts, solver_opts))
-    catch :complete ->
-      :ok
+    catch
+      :complete ->
+        :ok
     end
   end
 
@@ -160,12 +162,12 @@ defmodule InPlace.ExactCover do
         # Cover column c.
         ##
         # |> IO.inspect(label: :cover_top)
-        num_removed_entries = cover(c, state)
-        if num_removed_entries > 0 do
-        ## Knuth:
-        # For each r ← D[c], D[D[c]], . . . , while r != c,
-        ##
-
+        # num_removed_entries = cover(c, state)
+        ## if num_removed_entries > 0 do
+        if cover(c, state) do
+          ## Knuth:
+          # For each r ← D[c], D[D[c]], . . . , while r != c,
+          #
           iterate_column(
             c,
             fn r ->
@@ -177,7 +179,7 @@ defmodule InPlace.ExactCover do
               # for each j ← R[r], R[R[r]], . . . , while j != r,
               #  cover column j
               ##
-              #{_num_covered_columns, _num_removed_entries} =
+              # {_num_covered_columns, _num_removed_entries} =
               cover_option_columns(r, state)
               search(k + 1, state)
               ## Knuth:
@@ -185,8 +187,8 @@ defmodule InPlace.ExactCover do
               #  uncover column j.
               ##
               uncover_option_columns(r, state)
-              #uncover(r, num_covered_columns, num_removed_entries, state)
-              #uncover(r, )
+              # uncover(r, num_covered_columns, num_removed_entries, state)
+              # uncover(r, )
             end,
             state
           )
@@ -208,8 +210,8 @@ defmodule InPlace.ExactCover do
           j != option_pointer ->
             # Tricky; cover/2 expects header (not item) pointer,
             # so we need to convert
-              get_top(state, j)
-              |> cover(state)
+            get_top(state, j)
+            |> cover(state)
 
           true ->
             :ok
@@ -227,13 +229,15 @@ defmodule InPlace.ExactCover do
           j != option_pointer ->
             # Tricky; cover/2 expects header (not item) pointer,
             # so we need to convert
-              get_top(state, j)
-              |> uncover(state)
+            get_top(state, j)
+            |> uncover(state)
+
           true ->
             :ok
         end
       end,
-      state, false
+      state,
+      false
     )
   end
 
@@ -281,7 +285,7 @@ defmodule InPlace.ExactCover do
   end
 
   defp get_item_options_count(state, item_pointer) do
-    Array.get(state.item_option_counts, item_pointer)
+    Array.get(state.item_option_counts.counts, item_pointer)
   end
 
   defp add_to_solution(solution, step, item) do
@@ -343,34 +347,37 @@ defmodule InPlace.ExactCover do
     ## Knuth:
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
-    LinkedList.delete_pointer(item_header, column_pointer)
-    ## Knuth:
-    #  For each i ← D[c], D[D[c]] , . . . , while i != c,
-    ##
-    iterate_column(
-      column_pointer,
-      ## count of removed entries
+
+    if !covered?(column_pointer, state) do
+      LinkedList.delete_pointer(item_header, column_pointer)
       ## Knuth:
-      # For each j ← R[i], R[R[i]] , . . . , while j != i,
+      #  For each i ← D[c], D[D[c]] , . . . , while i != c,
       ##
-      fn i ->
-        iterate_row(
-          i,
-          fn j ->
-            ## Knuth:
-            # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
-            ##
-            if i != j do
-              LinkedList.delete_pointer(item_lists, j)
-              # and set S[C[j]]  ← S[C[j]]  − 1
-              decrease_option_count(state, j)
-            end
-          end,
-          state
-        )
-      end,
-      state
-    )
+      iterate_column(
+        column_pointer,
+        ## count of removed entries
+        ## Knuth:
+        # For each j ← R[i], R[R[i]] , . . . , while j != i,
+        ##
+        fn i ->
+          iterate_row(
+            i,
+            fn j ->
+              ## Knuth:
+              # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
+              ##
+              if i != j do
+                LinkedList.delete_pointer(item_lists, j)
+                # and set S[C[j]]  ← S[C[j]]  − 1
+                decrease_option_count(state, j)
+              end
+            end,
+            state
+          )
+        end,
+        state
+      )
+    end
   end
 
   ## This variant of cover/2 is for debugging only.
@@ -380,6 +387,9 @@ defmodule InPlace.ExactCover do
     cover(column_pointer(item_name, state), state)
   end
 
+  defp covered?(column_pointer, %{item_header: item_header} = _state) do
+    LinkedList.pointer_deleted?(item_header, column_pointer)
+  end
 
   def uncover(
         column_pointer,
@@ -392,8 +402,10 @@ defmodule InPlace.ExactCover do
     ## Knuth:
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
-    LinkedList.restore_pointer(item_header, column_pointer)
-    ## Knuth:
+
+    if covered?(column_pointer, state) do
+      LinkedList.restore_pointer(item_header, column_pointer)
+      ## Knuth:
     #  For each i ← D[c], D[D[c]] , . . . , while i != c,
     ##
     iterate_column(
@@ -415,21 +427,29 @@ defmodule InPlace.ExactCover do
               increase_option_count(state, j)
             end
           end,
-          state, false
+          state,
+          false
         )
       end,
-      state, false
+      state,
+      false
     )
+    end
   end
 
   defp decrease_option_count(state, item_option_pointer) do
     top = get_top(state, item_option_pointer)
-    Array.update(state.item_option_counts, top, fn val -> val - 1 end)
+    update_option_count(state, top, fn val -> val - 1 end)
   end
 
   def increase_option_count(state, item_option_pointer) do
     top = get_top(state, item_option_pointer)
-    Array.update(state.item_option_counts, top, fn val -> val + 1 end)
+    update_option_count(state, top, fn val -> val + 1 end)
+  end
+
+  ## 'update_fun/1' takes and updates current option count for given item header pointer
+  def update_option_count(state, item_header_pointer, update_fun) when is_function(update_fun, 1) do
+    Array.update(state.item_option_counts.counts, item_header_pointer, update_fun)
   end
 
   defp map_to_array(map) do
@@ -439,15 +459,19 @@ defmodule InPlace.ExactCover do
   end
 
   defp init_item_option_counts(item_lists) do
-    arr = Array.new(length(item_lists))
+    num_items = length(item_lists)
+    arr = Array.new(num_items)
+    copy = Array.new(num_items)
 
     item_lists
     |> Enum.with_index(1)
     |> Enum.each(fn {options, item_idx} ->
-      Array.put(arr, item_idx, length(options))
+      num_options = length(options)
+      Array.put(arr, item_idx, num_options)
+      Array.put(copy, item_idx, num_options)
     end)
 
-    arr
+    %{counts: arr, copy: copy}
   end
 
   defp get_top(%{top: top} = _state, el) do

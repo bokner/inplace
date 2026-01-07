@@ -20,12 +20,15 @@ defmodule InPlace.Examples.Sudoku do
     ## Plug in solution handler
     top_solution_handler = Keyword.get(opts, :solution_handler)
     checker = Keyword.get(opts, :checker)
-    opts = Keyword.put(opts, :solution_handler, fn solution ->
-      solution
-      |> solution_to_sudoku(instance_array, options, d)
-      |> tap(fn solution -> checker && check_solution(solution) end)
-      |> top_solution_handler.()
-    end)
+
+    opts =
+      Keyword.put(opts, :solution_handler, fn solution ->
+        solution
+        |> solution_to_sudoku(instance_array, options, d)
+        |> tap(fn solution -> checker && check_solution(solution) end)
+        |> top_solution_handler.()
+      end)
+
     ## Solve with exact cover
     ExactCover.solve(options, opts)
   end
@@ -38,14 +41,15 @@ defmodule InPlace.Examples.Sudoku do
   end
 
   def init(instance) when is_binary(instance) do
-   l = String.length(instance)
-   d = :math.sqrt(l) |> floor()
-   if d*d != l, do: throw(:invalid_instance)
-   sqrt_d = :math.sqrt(d) |> floor()
-   if sqrt_d * sqrt_d != d, do: throw(:invalid_instance)
+    l = String.length(instance)
+    d = :math.sqrt(l) |> floor()
+    if d * d != l, do: throw(:invalid_instance)
+    sqrt_d = :math.sqrt(d) |> floor()
+    if sqrt_d * sqrt_d != d, do: throw(:invalid_instance)
 
     %{
-      options: init_exact_cover(instance, d), dimension: d,
+      options: init_exact_cover(instance, d),
+      dimension: d,
       instance: instance_to_array(instance)
     }
   end
@@ -57,7 +61,7 @@ defmodule InPlace.Examples.Sudoku do
     ## - d^2 for columns: each of the d columns must have each possible value 1-d.
     ## - d^2 for rows: each of the d rows must have each possible value 1-d.
     ## - d^2 for blocks: Each of the d sqrt(d)×sqrt(d) blocks must have each possible value 1-d.
-    ##??  - initial state: Since there is an initial state for the board, one option will describe the initial state and this item ensures that it is always part of any solution found.
+    ## ??  - initial state: Since there is an initial state for the board, one option will describe the initial state and this item ensures that it is always part of any solution found.
 
     ## Rows (options in "exact-cover" terms)
     ## There will be (d*d - num_open_cells) * d rows (options)
@@ -65,23 +69,21 @@ defmodule InPlace.Examples.Sudoku do
     ##
 
     {_position, options, covered_set} =
-    for <<cell <- instance>>, reduce: {0, [], MapSet.new()} do
-      {cell_number, options_acc, covered_acc} ->
-
-        if hidden_cell?(cell) do
-          {cell_number + 1,
-          Enum.map(0..d-1, fn value ->
-            create_option(cell_number * d + value, d)
-          end) ++ options_acc, covered_acc}
-        else
-          {cell_number + 1,
-            options_acc,
-            MapSet.union(covered_acc,
-              MapSet.new(create_option(cell_number * d + cell_value(cell) - 1, d))
-            )
-          }
-        end
-    end
+      for <<cell <- instance>>, reduce: {0, [], MapSet.new()} do
+        {cell_number, options_acc, covered_acc} ->
+          if hidden_cell?(cell) do
+            {cell_number + 1,
+             Enum.map(0..(d - 1), fn value ->
+               create_option(cell_number * d + value, d)
+             end) ++ options_acc, covered_acc}
+          else
+            {cell_number + 1, options_acc,
+             MapSet.union(
+               covered_acc,
+               MapSet.new(create_option(cell_number * d + cell_value(cell) - 1, d))
+             )}
+          end
+      end
 
     Enum.filter(options, fn opt -> MapSet.disjoint?(MapSet.new(opt), covered_set) end)
   end
@@ -120,14 +122,15 @@ defmodule InPlace.Examples.Sudoku do
   def block_item(row, d) do
     d_squared = d * d
     sqrt_d = floor(:math.sqrt(d))
+
     3 * d_squared +
-    div(row, sqrt_d * d_squared) * d * sqrt_d +
-    (div(row, sqrt_d * d) |> rem(sqrt_d)) * d + rem(row, d)
+      div(row, sqrt_d * d_squared) * d * sqrt_d +
+      (div(row, sqrt_d * d) |> rem(sqrt_d)) * d + rem(row, d)
   end
 
   defp instance_to_array(instance) when is_binary(instance) do
     for <<cell <- instance>> do
-      hidden_cell?(cell) && 0 || cell_value(cell)
+      (hidden_cell?(cell) && 0) || cell_value(cell)
     end
   end
 
@@ -150,15 +153,20 @@ defmodule InPlace.Examples.Sudoku do
   """
   def solution_to_sudoku(solution, instance, options, d) do
     grid_size = d * d
+
     solution
     |> Enum.map(fn opt_idx ->
       [_, r, c, _] = Enum.at(options, opt_idx)
-       {val, row, col} =
+
+      {val, row, col} =
         {
           rem(r - grid_size, d) + 1,
-          div(r - grid_size, d), div(c - 2 * grid_size, d)}
+          div(r - grid_size, d),
+          div(c - 2 * grid_size, d)
+        }
+
       {row * d + col, val}
-        end)
+    end)
     |> then(fn solved_values ->
       Enum.reduce(solved_values, instance, fn {pos, value}, acc ->
         List.replace_at(acc, pos, value)
@@ -194,5 +202,4 @@ defmodule InPlace.Examples.Sudoku do
       end
     end
   end
-
 end

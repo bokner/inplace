@@ -125,6 +125,5 @@ defmodule InPlace.ExactCoverTest do
         assert MapSet.new(List.flatten(options)) == combined
       end)
     end
-
   end
 end
