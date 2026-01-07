@@ -266,7 +266,7 @@ defmodule InPlace.ExactCover do
   end
 
   @spec min_options_item(any()) :: any()
-  def min_options_item(state, method \\ :sequence)
+  def min_options_item(state, method \\ :heap)
 
   def min_options_item(%{item_header: item_header} = state, :sequence) do
     head = LinkedList.head(item_header)
@@ -524,11 +524,14 @@ defmodule InPlace.ExactCover do
 
   defp item_comparator(state, counts) do
     fn item_pointer1, item_pointer2 ->
+      covered1 = covered?(item_pointer1, state)
+      covered2 = covered?(item_pointer2, state)
       cond do
-        covered?(item_pointer1, state) -> false
-        covered?(item_pointer2, state) -> true
+        covered1 && covered2 -> true
+        covered1 -> false
+        covered2 -> true
         true ->
-          Array.get(counts, item_pointer1) < Array.get(counts, item_pointer2)
+          Array.get(counts, item_pointer1) <= Array.get(counts, item_pointer2)
       end
     end
   end
