@@ -164,7 +164,7 @@ defmodule InPlace.ExactCover do
         # |> IO.inspect(label: :cover_top)
         # num_removed_entries = cover(c, state)
         ## if num_removed_entries > 0 do
-        if cover(c, state) do
+        cover(c, state)
           ## Knuth:
           # For each r ← D[c], D[D[c]], . . . , while r != c,
           #
@@ -192,7 +192,7 @@ defmodule InPlace.ExactCover do
             end,
             state
           )
-        end
+
 
         ## Knuth:
         # Uncover column c and return.
