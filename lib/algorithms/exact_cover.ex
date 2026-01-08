@@ -461,17 +461,15 @@ defmodule InPlace.ExactCover do
   defp init_item_option_counts(item_lists) do
     num_items = length(item_lists)
     arr = Array.new(num_items)
-    copy = Array.new(num_items)
 
     item_lists
     |> Enum.with_index(1)
     |> Enum.each(fn {options, item_idx} ->
       num_options = length(options)
       Array.put(arr, item_idx, num_options)
-      Array.put(copy, item_idx, num_options)
     end)
 
-    %{counts: arr, copy: copy}
+    %{counts: arr}
   end
 
   defp get_top(%{top: top} = _state, el) do
