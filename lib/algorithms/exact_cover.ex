@@ -263,6 +263,8 @@ defmodule InPlace.ExactCover do
   end
 
   def min_options_item(%{item_header: item_header} = state) do
+    {min_item, _option_count} = get_min_item(state)
+    if covered?(min_item, state) do
     head = LinkedList.head(item_header)
     head_count = get_item_options_count(state, head)
 
@@ -282,6 +284,9 @@ defmodule InPlace.ExactCover do
       initial_value: {head, head_count}
     )
     |> elem(0)
+    else
+      min_item
+    end
   end
 
   defp get_item_options_count(state, item_pointer) do
@@ -348,7 +353,6 @@ defmodule InPlace.ExactCover do
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
 
-    if !covered?(column_pointer, state) do
       LinkedList.delete_pointer(item_header, column_pointer)
       ## Knuth:
       #  For each i ← D[c], D[D[c]] , . . . , while i != c,
@@ -377,7 +381,6 @@ defmodule InPlace.ExactCover do
         end,
         state
       )
-    end
   end
 
   ## This variant of cover/2 is for debugging only.
@@ -403,9 +406,8 @@ defmodule InPlace.ExactCover do
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
 
-    if covered?(column_pointer, state) do
-      LinkedList.restore_pointer(item_header, column_pointer)
-      ## Knuth:
+    LinkedList.restore_pointer(item_header, column_pointer)
+    ## Knuth:
     #  For each i ← D[c], D[D[c]] , . . . , while i != c,
     ##
     iterate_column(
@@ -434,12 +436,17 @@ defmodule InPlace.ExactCover do
       state,
       false
     )
-    end
   end
 
   defp decrease_option_count(state, item_option_pointer) do
     top = get_top(state, item_option_pointer)
-    update_option_count(state, top, fn val -> val - 1 end)
+    update_option_count(state, top,
+      fn val ->
+        new_val = val - 1
+
+        maybe_update_min_item(state, top, new_val)
+        new_val
+    end)
   end
 
   def increase_option_count(state, item_option_pointer) do
@@ -460,16 +467,46 @@ defmodule InPlace.ExactCover do
 
   defp init_item_option_counts(item_lists) do
     num_items = length(item_lists)
-    arr = Array.new(num_items)
-
+    counts = Array.new(num_items)
+    ## min_item[1] - pointer, min_item[2] - value (minimal number of options)
+    min_item = Array.new(2)
+    {min_item_idx, min_options_value} =
     item_lists
     |> Enum.with_index(1)
-    |> Enum.each(fn {options, item_idx} ->
+    |> Enum.reduce({nil, nil} ,fn {options, item_idx}, {_p_acc, value_acc} = min_acc ->
       num_options = length(options)
-      Array.put(arr, item_idx, num_options)
+      Array.put(counts, item_idx, num_options)
+      if value_acc > num_options do
+        {item_idx, num_options}
+      else
+        min_acc
+      end
     end)
 
-    %{counts: arr}
+    update_min_item(min_item, min_item_idx, min_options_value)
+    %{counts: counts, min_item: min_item}
+  end
+
+  defp update_min_item(%{item_option_counts: %{min_item: min_item}} = _state, item_pointer, option_count) do
+    update_min_item(min_item, item_pointer, option_count)
+  end
+
+  defp update_min_item(min_item, item_pointer, option_count) do
+    Array.put(min_item, 1, item_pointer)
+    Array.put(min_item, 2, option_count)
+  end
+
+  defp get_min_item(%{item_option_counts: %{min_item: min_item}} = _state) do
+    {Array.get(min_item, 1), Array.get(min_item, 2)}
+  end
+
+  defp maybe_update_min_item(state, item_pointer, option_count) do
+    {_current_min_item, current_min_count} = get_min_item(state)
+    if current_min_count > option_count do
+      update_min_item(state, item_pointer, option_count)
+    else
+      :ok
+    end
   end
 
   defp get_top(%{top: top} = _state, el) do
