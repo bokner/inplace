@@ -502,7 +502,8 @@ defmodule InPlace.ExactCover do
 
   defp maybe_update_min_item(state, item_pointer, option_count) do
     {_current_min_item, current_min_count} = get_min_item(state)
-    if current_min_count > option_count || (current_min_count == option_count && !covered?(item_pointer, state)) do
+    if (current_min_count > option_count) ||
+      (current_min_count == option_count && !covered?(item_pointer, state)) do
       update_min_item(state, item_pointer, option_count)
     else
       :ok
