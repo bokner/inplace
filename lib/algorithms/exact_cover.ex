@@ -120,18 +120,20 @@ defmodule InPlace.ExactCover do
 
     top = map_to_array(item_top_map)
 
-    %{
+    state = %{
       item_header: item_header,
       option_start_ids: Enum.reverse(option_start_ids),
       item_names: item_names,
       top: top,
       item_lists: item_lists_ll,
       option_lists: option_lists_ll,
-      item_option_counts: init_item_option_counts(item_lists),
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
       solution: Array.new(length(options))
     }
+
+    Map.put(state, :item_option_counts, init_item_option_counts(item_lists, state))
+
   end
 
   defp search(
@@ -465,9 +467,10 @@ defmodule InPlace.ExactCover do
     array
   end
 
-  defp init_item_option_counts(item_lists) do
+  defp init_item_option_counts(item_lists, state) do
     num_items = length(item_lists)
     counts = Array.new(num_items)
+    degrees = Array.new(num_items)
     ## min_item[1] - pointer, min_item[2] - value (minimal number of options)
     min_item = Array.new(2)
     {min_item_idx, min_options_value} =
@@ -476,6 +479,7 @@ defmodule InPlace.ExactCover do
     |> Enum.reduce({nil, nil} ,fn {options, item_idx}, {_p_acc, value_acc} = min_acc ->
       num_options = length(options)
       Array.put(counts, item_idx, num_options)
+      Array.put(degrees, item_idx, item_degree(item_idx, state))
       if value_acc > num_options do
         {item_idx, num_options}
       else
@@ -484,7 +488,33 @@ defmodule InPlace.ExactCover do
     end)
 
     update_min_item(min_item, min_item_idx, min_options_value)
-    %{counts: counts, min_item: min_item}
+
+    %{counts: counts, degrees: degrees, min_item: min_item}
+  end
+
+  ## Get the items "connected" to the given one
+  ## through options.
+  ## In other words, the items that share options with this one.
+  def connected_items(item_pointer, %{item_header: header, item_lists: item_lists, option_lists: option_lists} = state) do
+    ## Get an entry into sublist of item lists
+    entry = LinkedList.data(header, item_pointer)
+    LinkedList.iterate(item_lists, fn i, acc ->
+      if i == entry do
+        {:halt, acc}
+      else
+        LinkedList.iterate(option_lists, fn o, o_acc ->
+          if o == i do
+            {:halt, o_acc}
+          else
+            MapSet.put(o_acc, get_top(state, o))
+          end
+        end, start: LinkedList.next(option_lists, i), initial_value: acc)
+      end
+    end, start: LinkedList.next(item_lists, entry), initial_value: MapSet.new())
+  end
+
+  def item_degree(item_pointer, state) do
+    connected_items(item_pointer, state) |> MapSet.size()
   end
 
   defp update_min_item(%{item_option_counts: %{min_item: min_item}} = _state, item_pointer, option_count) do
@@ -501,20 +531,31 @@ defmodule InPlace.ExactCover do
   end
 
   defp maybe_update_min_item(state, item_pointer, option_count) do
-    {_current_min_item, current_min_count} = get_min_item(state)
-    if (current_min_count > option_count) ||
-      (current_min_count == option_count && !covered?(item_pointer, state)) do
-      update_min_item(state, item_pointer, option_count)
-    else
-      :ok
-    end
+    {current_min_item, current_min_count} = get_min_item(state)
+    cond do
+      current_min_count < option_count -> :ok
+      current_min_count > option_count ->
+        update_min_item(state, item_pointer, option_count)
+      current_min_count == option_count ->
+        if covered?(item_pointer, state) do
+          :ok
+        else
+          #current_degree = item_degree(current_min_item, state)
+          #item_pointer_degree = item_degree(item_pointer, state)
+          #if covered?(current_min_item, state) || current_degree > item_pointer_degree do
+            update_min_item(state, item_pointer, option_count)
+          #else
+          #  :ok
+          #end
+        end
+      end
   end
 
-  defp get_top(%{top: top} = _state, el) do
+  def get_top(%{top: top} = _state, el) do
     get_top(top, el)
   end
 
-  defp get_top(top, el) do
+  def get_top(top, el) do
     Array.get(top, el)
   end
 
