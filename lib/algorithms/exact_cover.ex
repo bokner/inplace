@@ -263,7 +263,7 @@ defmodule InPlace.ExactCover do
   end
 
   def min_options_item(%{item_header: item_header} = state) do
-    {min_item, _option_count} = get_min_item(state)
+    {min_item, min_option_count} = get_min_item(state)
     if covered?(min_item, state) do
     head = LinkedList.head(item_header)
     head_count = get_item_options_count(state, head)
@@ -283,7 +283,12 @@ defmodule InPlace.ExactCover do
       end,
       initial_value: {head, head_count}
     )
-    |> elem(0)
+    |> then(fn {min_item, min_value} ->
+      if min_option_count > min_value do
+        update_min_item(state, min_item, min_value)
+      end
+      min_item
+    end)
     else
       min_item
     end
@@ -349,6 +354,7 @@ defmodule InPlace.ExactCover do
         } = state
       )
       when is_integer(column_pointer) and column_pointer > 0 do
+
     ## Knuth:
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
