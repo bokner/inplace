@@ -130,7 +130,7 @@ defmodule InPlace.Heap do
 
   def decrease_key(%{array: array} = heap, key, delta)
       when is_integer(key) and is_integer(delta) and delta >= 0 do
-        position = get_key_position(heap, key)
+    position = get_key_position(heap, key)
     Array.update(array, position, fn key -> key - delta end)
     sift_up(heap, position)
   end
