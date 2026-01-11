@@ -265,8 +265,8 @@ defmodule InPlace.ExactCover do
   def min_options_item(%{item_header: item_header} = state) do
     {min_item, min_option_count} = get_min_item(state)
     if covered?(min_item, state) do
-    head = LinkedList.head(item_header)
-    head_count = get_item_options_count(state, head)
+    start = Enum.random([true, false]) && LinkedList.head(item_header) || LinkedList.tail(item_header)
+    start_count = get_item_options_count(state, start)
 
     LinkedList.iterate(
       item_header,
@@ -281,7 +281,8 @@ defmodule InPlace.ExactCover do
             {p, min(count, min_acc)}
         end
       end,
-      initial_value: {head, head_count}
+      initial_value: {start, start_count},
+      forward: Enum.random([true, false])
     )
     |> then(fn {min_item, min_value} ->
       if min_option_count > min_value do
