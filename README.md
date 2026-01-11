@@ -1,4 +1,4 @@
-# Inplace
+# InPlace
 
 Collection of mutable data structures.
 
