@@ -73,19 +73,20 @@ defmodule InPlace.Examples.Sudoku do
         {cell_number, options_acc, covered_acc} ->
           if hidden_cell?(cell) do
             {cell_number + 1,
-             Enum.map(0..(d - 1), fn value ->
-               create_option(cell_number * d + value, d)
-             end) ++ options_acc, covered_acc}
+             Enum.reduce(0..(d - 1), options_acc, fn value, opt_acc ->
+              opt = create_option(cell_number * d + value, d)
+               MapSet.disjoint?(opt, covered_acc) && [opt | opt_acc] || opt_acc
+             end), covered_acc}
           else
             {cell_number + 1, options_acc,
              MapSet.union(
                covered_acc,
-               MapSet.new(create_option(cell_number * d + cell_value(cell) - 1, d))
+               create_option(cell_number * d + cell_value(cell) - 1, d)
              )}
           end
       end
 
-    Enum.filter(options, fn opt -> MapSet.disjoint?(MapSet.new(opt), covered_set) end)
+    Enum.filter(options, fn opt -> MapSet.disjoint?(opt, covered_set) end)
   end
 
   defp hidden_cell?(ascii_code) do
@@ -98,7 +99,7 @@ defmodule InPlace.Examples.Sudoku do
       row_item(row, d),
       column_item(row, d),
       block_item(row, d)
-    ]
+    ] |> MapSet.new()
   end
 
   defp cell_value(ascii_code) do
@@ -156,7 +157,7 @@ defmodule InPlace.Examples.Sudoku do
 
     solution
     |> Enum.map(fn opt_idx ->
-      [_, r, c, _] = Enum.at(options, opt_idx)
+      [_, r, c, _] = Enum.at(options, opt_idx) |> MapSet.to_list()
 
       {val, row, col} =
         {
