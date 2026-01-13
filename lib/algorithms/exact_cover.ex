@@ -32,13 +32,15 @@ defmodule InPlace.ExactCover do
   def init(options) do
     ## Options are sets that contain item names.
     ## Build the state structures (roughly as described by D. Knuth)
-    {item_map, entry_count, option_lists} =
-      Enum.reduce(options, {Map.new(), 0, []}, fn option,
-                                                      {directory, entry_idx, option_items} = _acc ->
-        {directory, entry_count, items} =
-          Enum.reduce(option, {directory, entry_idx, []}, fn item_name,
-                                                             {dir_acc, entry_idx_acc,
-                                                              option_items_acc} ->
+    {item_map, entry_count, option_lists, option_membership} =
+      Enum.reduce(
+        Enum.with_index(options, 1), {Map.new(), 0, [], []},
+          fn {option, option_idx},
+              {directory, entry_idx, option_items, option_membership} = _acc ->
+        {directory, entry_count, items, membership} =
+          Enum.reduce(option, {directory, entry_idx, [], option_membership},
+            fn item_name,
+                {dir_acc, entry_idx_acc, option_items_acc, membership_acc} ->
             ## 1-based index, for convenience
             entry_idx_acc = entry_idx_acc + 1
 
@@ -47,13 +49,15 @@ defmodule InPlace.ExactCover do
                 [entry_idx_acc | entries]
               end),
               entry_idx_acc,
-              [entry_idx_acc | option_items_acc]
+              [entry_idx_acc | option_items_acc],
+              [option_idx | membership_acc]
             }
           end)
 
-        {directory, entry_count, [items | option_items]}
+        {directory, entry_count, [items | option_items], membership}
       end)
 
+    #IO.inspect(option_membership, label: :membership)
     num_items = map_size(item_map)
     ## build item header, item and option lists
     {item_names, item_lists} = Enum.unzip(item_map)
@@ -119,7 +123,7 @@ defmodule InPlace.ExactCover do
 
     %{
       item_header: item_header,
-      option_member_ids: init_option_member_ids(option_lists),
+      option_member_ids: init_option_member_ids(option_membership),
       item_names: item_names,
       top: top,
       item_lists: item_lists_ll,
@@ -465,23 +469,17 @@ defmodule InPlace.ExactCover do
 
   ## Mapping from 'absolute' option member ids (as in option_lists)
   ## to option ids they belong to
-  defp init_option_member_ids(option_lists) do
-    ## option lists are in reverse order, i.e. first element corresponds to the last
-    ## option
-    Enum.reduce(option_lists, {[], length(option_lists)}, fn option, {acc, reverse_idx} ->
-      {
-        Enum.reduce(option, acc, fn _o, acc2 -> [reverse_idx | acc2] end),
-        reverse_idx - 1
-      }
-    end)
-    |> then(fn {membership, _} ->
-      arr = Array.new(length(membership))
-      Enum.reduce(membership, 1, fn idx, acc ->
-        Array.put(arr, acc, idx)
-        acc + 1
+  defp init_option_member_ids(option_membership) do
+    ## option membership is in reverse order, i.e. the members that belong to the first
+    ## option are in the end of the membership list.
+    l = length(option_membership)
+    arr = Array.new(l)
+
+    Enum.reduce(option_membership, l, fn idx, acc ->
+      Array.put(arr, acc, idx)
+        acc - 1
       end)
       arr
-    end)
   end
 
   defp get_option_id(%{option_member_ids: option_ids} = _state, option_entry) do
