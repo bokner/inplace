@@ -81,29 +81,29 @@ defmodule InPlace.ExactCover do
       LinkedList.new(Enum.to_list(1..(entry_count + num_items)), deletion: :hide)
       |> tap(fn ll ->
         item_lists
-        |> Enum.zip((entry_count + 1)..(entry_count + num_items))
-        |> Enum.each(fn {options, item_header} ->
+        |> Enum.zip(1..num_items)
+        |> Enum.each(fn {options, item_header_idx} ->
+          item_top = entry_count + item_header_idx
           ## create sublists of options per item
-          LinkedList.circuit(ll, [item_header | options])
+          item_options = [item_top | options]
+          LinkedList.circuit(ll, item_options)
         end)
       end)
 
-    item_top_map =
-      LinkedList.iterate(
+    top = Array.new(num_items + entry_count)
+    LinkedList.iterate(
         item_header,
-        fn p, acc ->
-          top = LinkedList.data(item_header, p)
+        fn p ->
+          item_top = LinkedList.data(item_header, p)
 
           LinkedList.iterate(
             item_lists_ll,
-            fn s, acc2 ->
-              Map.put(acc2, s, p)
+            fn s ->
+              Array.put(top, s, p)
             end,
-            start: top,
-            initial_value: acc
+            start: item_top
           )
-        end,
-        initial_value: Map.new()
+        end
       )
 
     ## NOTE: we won't have to cover/uncover options, hence there is no "undoing" it
@@ -118,8 +118,6 @@ defmodule InPlace.ExactCover do
           fn items -> LinkedList.circuit(ll, items) end
         )
       end)
-
-    top = map_to_array(item_top_map)
 
     %{
       item_header: item_header,
@@ -456,12 +454,6 @@ defmodule InPlace.ExactCover do
   def update_option_count(state, item_header_pointer, update_fun)
       when is_function(update_fun, 1) do
     Array.update(state.item_option_counts.counts, item_header_pointer, update_fun)
-  end
-
-  defp map_to_array(map) do
-    array = Array.new(map_size(map))
-    Enum.each(map, fn {key, value} -> Array.put(array, key, value) end)
-    array
   end
 
   ## Mapping from 'absolute' option member ids (as in option_lists)
