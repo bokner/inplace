@@ -77,17 +77,30 @@ defmodule InPlace.ExactCover do
         deletion: :hide
       )
 
+    option_counts = Array.new(num_items)
+    min_option_item = Array.new(2)
+
     item_lists_ll =
       LinkedList.new(Enum.to_list(1..(entry_count + num_items)), deletion: :hide)
       |> tap(fn ll ->
+        {_, min_option_idx, min_option_count} =
         item_lists
-        |> Enum.with_index(1)
-        |> Enum.each(fn {options, item_header_idx} ->
+        |> Enum.reduce({1, nil, nil}, fn options, {item_header_idx, min_option_idx, min_option_count} ->
           item_top = entry_count + item_header_idx
+          num_options = length(options)
+          Array.put(option_counts, item_header_idx, num_options)
           ## create sublists of options per item
           item_options = [item_top | options]
           LinkedList.circuit(ll, item_options)
+          {min_option_idx, min_option_count} =
+            if num_options < min_option_count do
+              {item_header_idx, num_options}
+            else
+              {min_option_idx, min_option_count}
+            end
+          {item_header_idx + 1, min_option_idx, min_option_count}
         end)
+        update_min_item(min_option_item, min_option_idx, min_option_count)
       end)
 
     top = Array.new(num_items + entry_count)
@@ -126,7 +139,7 @@ defmodule InPlace.ExactCover do
       top: top,
       item_lists: item_lists_ll,
       option_lists: option_lists_ll,
-      item_option_counts: init_item_option_counts(item_lists),
+      item_option_counts: %{counts: option_counts, min_item: min_option_item},
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
       solution: Array.new(length(options))
@@ -473,30 +486,6 @@ defmodule InPlace.ExactCover do
 
   defp get_option_id(%{option_member_ids: option_ids} = _state, option_entry) do
     Array.get(option_ids, option_entry)
-  end
-
-  defp init_item_option_counts(item_lists) do
-    num_items = length(item_lists)
-    counts = Array.new(num_items)
-    ## min_item[1] - pointer, min_item[2] - value (minimal number of options)
-    min_item = Array.new(2)
-
-    {min_item_idx, min_options_value} =
-      item_lists
-      |> Enum.with_index(1)
-      |> Enum.reduce({nil, nil}, fn {options, item_idx}, {_p_acc, value_acc} = min_acc ->
-        num_options = length(options)
-        Array.put(counts, item_idx, num_options)
-
-        if value_acc > num_options do
-          {item_idx, num_options}
-        else
-          min_acc
-        end
-      end)
-
-    update_min_item(min_item, min_item_idx, min_options_value)
-    %{counts: counts, min_item: min_item}
   end
 
   defp update_min_item(
