@@ -84,7 +84,7 @@ defmodule InPlace.ExactCover do
         |> Enum.zip((entry_count + 1)..(entry_count + num_items))
         |> Enum.each(fn {options, item_header} ->
           ## create sublists of options per item
-          LinkedList.circuit(ll, [item_header | Enum.reverse(options)])
+          LinkedList.circuit(ll, [item_header | options])
         end)
       end)
 
@@ -115,7 +115,7 @@ defmodule InPlace.ExactCover do
       |> tap(fn ll ->
         Enum.each(
           option_lists,
-          fn items -> LinkedList.circuit(ll, Enum.reverse(items)) end
+          fn items -> LinkedList.circuit(ll, items) end
         )
       end)
 
