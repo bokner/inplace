@@ -81,7 +81,7 @@ defmodule InPlace.ExactCover do
       LinkedList.new(Enum.to_list(1..(entry_count + num_items)), deletion: :hide)
       |> tap(fn ll ->
         item_lists
-        |> Enum.zip(1..num_items)
+        |> Enum.with_index(1)
         |> Enum.each(fn {options, item_header_idx} ->
           item_top = entry_count + item_header_idx
           ## create sublists of options per item
