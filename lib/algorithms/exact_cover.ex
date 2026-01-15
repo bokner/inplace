@@ -77,33 +77,46 @@ defmodule InPlace.ExactCover do
         deletion: :hide
       )
 
+    option_counts = Array.new(num_items)
+    min_option_item = Array.new(2)
+
     item_lists_ll =
       LinkedList.new(Enum.to_list(1..(entry_count + num_items)), deletion: :hide)
       |> tap(fn ll ->
+        {_, min_option_idx, min_option_count} =
         item_lists
-        |> Enum.zip((entry_count + 1)..(entry_count + num_items))
-        |> Enum.each(fn {options, item_header} ->
+        |> Enum.reduce({1, nil, nil}, fn options, {item_header_idx, min_option_idx, min_option_count} ->
+          item_top = entry_count + item_header_idx
+          num_options = length(options)
+          Array.put(option_counts, item_header_idx, num_options)
           ## create sublists of options per item
-          LinkedList.circuit(ll, [item_header | options])
+          item_options = [item_top | options]
+          LinkedList.circuit(ll, item_options)
+          {min_option_idx, min_option_count} =
+            if num_options < min_option_count do
+              {item_header_idx, num_options}
+            else
+              {min_option_idx, min_option_count}
+            end
+          {item_header_idx + 1, min_option_idx, min_option_count}
         end)
+        update_min_item(min_option_item, min_option_idx, min_option_count)
       end)
 
-    item_top_map =
-      LinkedList.iterate(
+    top = Array.new(num_items + entry_count)
+    LinkedList.iterate(
         item_header,
-        fn p, acc ->
-          top = LinkedList.data(item_header, p)
+        fn p ->
+          item_top = LinkedList.data(item_header, p)
 
           LinkedList.iterate(
             item_lists_ll,
-            fn s, acc2 ->
-              Map.put(acc2, s, p)
+            fn s ->
+              Array.put(top, s, p)
             end,
-            start: top,
-            initial_value: acc
+            start: item_top
           )
-        end,
-        initial_value: Map.new()
+        end
       )
 
     ## NOTE: we won't have to cover/uncover options, hence there is no "undoing" it
@@ -119,8 +132,6 @@ defmodule InPlace.ExactCover do
         )
       end)
 
-    top = map_to_array(item_top_map)
-
     %{
       item_header: item_header,
       option_member_ids: init_option_member_ids(option_membership),
@@ -128,7 +139,7 @@ defmodule InPlace.ExactCover do
       top: top,
       item_lists: item_lists_ll,
       option_lists: option_lists_ll,
-      item_option_counts: init_item_option_counts(item_lists),
+      item_option_counts: %{counts: option_counts, min_item: min_option_item},
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
       solution: Array.new(length(options))
@@ -458,12 +469,6 @@ defmodule InPlace.ExactCover do
     Array.update(state.item_option_counts.counts, item_header_pointer, update_fun)
   end
 
-  defp map_to_array(map) do
-    array = Array.new(map_size(map))
-    Enum.each(map, fn {key, value} -> Array.put(array, key, value) end)
-    array
-  end
-
   ## Mapping from 'absolute' option member ids (as in option_lists)
   ## to option ids they belong to
   defp init_option_member_ids(option_membership) do
@@ -481,30 +486,6 @@ defmodule InPlace.ExactCover do
 
   defp get_option_id(%{option_member_ids: option_ids} = _state, option_entry) do
     Array.get(option_ids, option_entry)
-  end
-
-  defp init_item_option_counts(item_lists) do
-    num_items = length(item_lists)
-    counts = Array.new(num_items)
-    ## min_item[1] - pointer, min_item[2] - value (minimal number of options)
-    min_item = Array.new(2)
-
-    {min_item_idx, min_options_value} =
-      item_lists
-      |> Enum.with_index(1)
-      |> Enum.reduce({nil, nil}, fn {options, item_idx}, {_p_acc, value_acc} = min_acc ->
-        num_options = length(options)
-        Array.put(counts, item_idx, num_options)
-
-        if value_acc > num_options do
-          {item_idx, num_options}
-        else
-          min_acc
-        end
-      end)
-
-    update_min_item(min_item, min_item_idx, min_options_value)
-    %{counts: counts, min_item: min_item}
   end
 
   defp update_min_item(
