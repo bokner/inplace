@@ -86,7 +86,7 @@ defmodule InPlace.Examples.Sudoku do
           end
       end
 
-    Enum.filter(options, fn opt -> MapSet.disjoint?(covered_set, opt) end)
+    Enum.filter(options, fn opt -> MapSet.disjoint?(opt, covered_set) end)
   end
 
   defp hidden_cell?(ascii_code) do
