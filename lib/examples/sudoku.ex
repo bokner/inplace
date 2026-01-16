@@ -75,7 +75,7 @@ defmodule InPlace.Examples.Sudoku do
             {cell_number + 1,
              Enum.reduce(0..(d - 1), options_acc, fn value, opt_acc ->
               opt = create_option(cell_number * d + value, d)
-               MapSet.disjoint?(opt, covered_acc) && [opt | opt_acc] || opt_acc
+               [opt | opt_acc]
              end), covered_acc}
           else
             {cell_number + 1, options_acc,
