@@ -1,8 +1,8 @@
 defmodule InPlace.BitSet do
   @moduledoc """
-  Bitset is functionally close to MapSet.
-  The main difference is taht one has to decide on lower and upper bounds
-  for set values upfront.
+  BitSet is close in functionality to MapSet with integer values a s members.
+  The main difference is that BitSet has lower and upper bounds
+  for set values that have to be defined at the time of creation (see new/2).
   """
   alias InPlace.Array
   import Bitwise
@@ -18,7 +18,11 @@ defmodule InPlace.BitSet do
       bit_vector: bit_vector,
       offset: -lower_bound,
       last_index: :atomics.info(atomics).size,
-      size: Array.new(1, 0)
+      size: Array.new(1, 0),
+      minmax: Array.new(2) |> tap(fn arr ->
+        Array.put(arr, 1, Array.negative_inf())
+        Array.put(arr, 2, Array.inf())
+      end)
     }
   end
 
@@ -34,6 +38,11 @@ defmodule InPlace.BitSet do
       :ok
     else
       :bit_vector.set(bit_vector, position)
+      ## TODO: look into element value
+      update_max(set, element)
+      update_min(set, element)
+      ## end of TODO
+
       Array.update(size, 1, fn current_size -> current_size + 1 end)
     end
   end
@@ -75,13 +84,20 @@ defmodule InPlace.BitSet do
     acc
   end
 
-  def iterate_impl(%{offset: offset} = set, acc, {block_idx, block_offset} = position, reducer) do
-    value_at_position = (block_idx - 1) * 64 + block_offset - offset
-    case reducer.(value_at_position, acc) do
+  def iterate_impl(%{offset: offset} = set, acc, position, reducer) do
+    case reducer.(value_at_position(set, position), acc) do
       {:halt, acc2} -> acc2
       {:cont, acc2} -> iterate_impl(set, acc2, next_position(set, position), reducer)
       acc2 -> iterate_impl(set, acc2, next_position(set, position), reducer)
     end
+  end
+
+  def value_at_position(set, {block_idx, block_offset}) do
+    value_at_position(set, block_idx, block_offset)
+  end
+
+  def value_at_position(%{offset: offset} = set, block_idx, block_offset) do
+    (block_idx - 1) * 64 + block_offset - offset
   end
 
   def first_position(set) do
@@ -97,17 +113,25 @@ defmodule InPlace.BitSet do
     next_position(set, block_idx, block_offset)
   end
 
-  def next_position(%{bit_vector: {:bit_vector, atomics}, last_index: last_idx} = set, block_idx, block_offset) do
+  def next_position(%{last_index: last_idx}, block_idx, _block_offset) when block_idx > last_idx do
+    nil
+  end
+
+  def next_position(%{bit_vector: {:bit_vector, atomics}} = set, block_idx, block_offset) do
     case Array.get(atomics, block_idx) do
       0 ->
         ## nothing in this block, try next one.
-        block_idx < last_idx && next_position(set, block_idx + 1, -1)
+        next_position(set, block_idx + 1, -1)
       block_value ->
         ## Reset all leftmost bits up to block_offset
         ## Take LSB - this will give an offset of next bit set to 1
         shift = block_offset + 1
-        new_block_offset = (block_value >>> shift) |> lsb()
-        {block_idx, new_block_offset + shift}
+        case (block_value >>> shift) |> lsb() do
+          nil ->
+            next_position(set, block_idx + 1, -1)
+          new_block_offset ->
+          {block_idx, new_block_offset + shift}
+        end
       end
   end
 
@@ -125,7 +149,7 @@ defmodule InPlace.BitSet do
   def to_list(set) do
   end
 
-  def size(%{size: size} = set) do
+  def size(%{size: size} = _set) do
     Array.get(size, 1)
   end
 
@@ -144,19 +168,44 @@ defmodule InPlace.BitSet do
   def equal?(set1, set2) do
   end
 
-  def first(set) do
+  def min(%{minmax: minmax} = _set) do
+    Array.get(minmax, 1)
   end
 
-  def last(set) do
+  def update_min(%{minmax: minmax} = set, value) do
+    if min(set) > value do
+      Array.put(minmax, 1, value)
+    end
+    :ok
   end
 
-  def next(set, element) do
+
+  def max(%{minmax: minmax} = _set) do
+    Array.get(minmax, 2)
+  end
+
+  def update_max(%{minmax: minmax} = set, value) do
+    current_max = max(set)
+    if is_nil(current_max) || current_max < value do
+      Array.put(minmax, 2, value)
+    end
+    :ok
+  end
+
+  def next(%{offset: value_offset} = set, element) do
+    current_position = value_address(element - value_offset)
+    case next_position(set, current_position) do
+      nil -> nil
+      next_pos -> value_at_position(set, next_pos)
+    end
   end
 
   def previous(set, element) do
+
   end
 
   def reduce(set, acc, reducer) when is_function(reducer, 2) do
+    iterate(set, acc, reducer)
   end
 
   def filter(set, filter_fun) when is_function(filter_fun, 1) do
