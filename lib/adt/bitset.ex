@@ -20,8 +20,8 @@ defmodule InPlace.BitSet do
       last_index: :atomics.info(atomics).size,
       size: Array.new(1, 0),
       minmax: Array.new(2) |> tap(fn arr ->
-        Array.put(arr, 1, Array.negative_inf())
-        Array.put(arr, 2, Array.inf())
+        Array.put(arr, 1, Array.inf())
+        Array.put(arr, 2, Array.negative_inf())
       end)
     }
   end
@@ -55,6 +55,8 @@ defmodule InPlace.BitSet do
       :ok
     else
       :bit_vector.clear(bit_vector, position)
+      maybe_tighten_min(set, element)
+      maybe_tighten_max(set, element)
       Array.update(size, 1, fn current_size -> current_size - 1 end)
     end
   end
@@ -113,7 +115,7 @@ defmodule InPlace.BitSet do
     next_position(set, block_idx, block_offset)
   end
 
-  def next_position(%{last_index: last_idx}, block_idx, _block_offset) when block_idx > last_idx do
+  def next_position(%{last_index: last_idx} = _set, block_idx, _block_offset) when block_idx > last_idx do
     nil
   end
 
@@ -141,7 +143,7 @@ defmodule InPlace.BitSet do
   end
 
   ## Given the value, find block index (that is a position in bit vector)
-  ## and an offset of the value relative to the beginning of the blokc
+  ## and an offset of the value relative to the beginning of the block
   def value_address(value) do
     {block_index(value), rem(value, 64)}
   end
@@ -179,6 +181,12 @@ defmodule InPlace.BitSet do
     :ok
   end
 
+  def maybe_tighten_min(%{minmax: minmax} = set, removed_value) do
+    if min(set) == removed_value do
+      Array.put(minmax, 1, next(set, removed_value))
+    end
+  end
+
 
   def max(%{minmax: minmax} = _set) do
     Array.get(minmax, 2)
@@ -192,16 +200,21 @@ defmodule InPlace.BitSet do
     :ok
   end
 
+  def maybe_tighten_max(%{minmax: minmax} = set, removed_value) do
+    if max(set) == removed_value do
+      #Array.put(minmax, 2, previous(set, removed_value))
+      :todo
+    end
+    :ok
+  end
+
+
   def next(%{offset: value_offset} = set, element) do
-    current_position = value_address(element - value_offset)
+    current_position = value_address(element + value_offset)
     case next_position(set, current_position) do
       nil -> nil
       next_pos -> value_at_position(set, next_pos)
     end
-  end
-
-  def previous(set, element) do
-
   end
 
   def reduce(set, acc, reducer) when is_function(reducer, 2) do
