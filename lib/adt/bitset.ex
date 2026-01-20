@@ -82,11 +82,11 @@ defmodule InPlace.BitSet do
     iterate_impl(set, acc, first_position(set), reducer)
   end
 
-  def iterate_impl(_set, acc, nil, _reducer) do
+  defp iterate_impl(_set, acc, nil, _reducer) do
     acc
   end
 
-  def iterate_impl(%{offset: offset} = set, acc, position, reducer) do
+  defp iterate_impl(set, acc, position, reducer) do
     case reducer.(value_at_position(set, position), acc) do
       {:halt, acc2} -> acc2
       {:cont, acc2} -> iterate_impl(set, acc2, next_position(set, position), reducer)
@@ -98,11 +98,11 @@ defmodule InPlace.BitSet do
     value_at_position(set, block_idx, block_offset)
   end
 
-  def value_at_position(%{offset: offset} = set, block_idx, block_offset) do
+  def value_at_position(%{offset: offset} = _set, block_idx, block_offset) do
     (block_idx - 1) * 64 + block_offset - offset
   end
 
-  def first_position(set) do
+  defp first_position(set) do
     if size(set) > 0 do
       next_position(set, 1, -1)
     end
@@ -149,6 +149,7 @@ defmodule InPlace.BitSet do
   end
 
   def to_list(set) do
+    iterate(set, [], fn val, acc -> [val | acc] end) |> Enum.reverse()
   end
 
   def size(%{size: size} = _set) do
@@ -170,43 +171,81 @@ defmodule InPlace.BitSet do
   def equal?(set1, set2) do
   end
 
-  def min(%{minmax: minmax} = _set) do
+  def min(set) do
+    if size(set) > 0 do
+      min_impl(set)
+    end
+  end
+
+  defp min_impl(%{minmax: minmax} = _set) do
     Array.get(minmax, 1)
   end
 
   def update_min(%{minmax: minmax} = set, value) do
-    if min(set) > value do
+    if min_impl(set) > value do
       Array.put(minmax, 1, value)
     end
     :ok
   end
 
   def maybe_tighten_min(%{minmax: minmax} = set, removed_value) do
-    if min(set) == removed_value do
-      Array.put(minmax, 1, next(set, removed_value))
+    if min_impl(set) == removed_value do
+      Array.put(minmax, 1, find_min(set, removed_value) || Array.inf())
     end
   end
 
 
-  def max(%{minmax: minmax} = _set) do
-    Array.get(minmax, 2)
+
+  def find_min(%{offset: value_offset, bit_vector: {:bit_vector, atomics}, last_index: last_idx} = set, starting_value) do
+    {min_block_idx, _min_block_offset} = value_address(starting_value + value_offset)
+    _new_min_value = Enum.reduce_while(min_block_idx..last_idx, nil,
+    fn block_idx, acc ->
+      case Array.get(atomics, block_idx) do
+        0 -> {:cont, acc}
+        block_value ->
+        {:halt, value_at_position(set, block_idx, lsb(block_value))}
+      end
+    end)
   end
 
+  def max(set) do
+    if size(set) > 0 do
+      max_impl(set)
+    end
+  end
+
+  defp max_impl(%{minmax: minmax} = _set) do
+      Array.get(minmax, 2)
+  end
+
+
   def update_max(%{minmax: minmax} = set, value) do
-    current_max = max(set)
-    if is_nil(current_max) || current_max < value do
+    if max_impl(set) < value do
       Array.put(minmax, 2, value)
     end
     :ok
   end
 
   def maybe_tighten_max(%{minmax: minmax} = set, removed_value) do
-    if max(set) == removed_value do
-      #Array.put(minmax, 2, previous(set, removed_value))
+    if max_impl(set) == removed_value do
+      Array.put(minmax, 2, find_max(set, removed_value) || Array.negative_inf())
       :todo
     end
     :ok
   end
+
+  def find_max(%{offset: value_offset, bit_vector: {:bit_vector, atomics}} = set, starting_value) do
+    {max_block_idx, _max_block_offset} = value_address(starting_value + value_offset)
+    _new_max_value = Enum.reduce_while(1..max_block_idx, nil,
+    fn block_idx, acc ->
+      case Array.get(atomics, block_idx) do
+        0 -> {:cont, acc}
+        block_value ->
+        {:halt, value_at_position(set, block_idx, msb(block_value))}
+      end
+    end)
+  end
+
 
 
   def next(%{offset: value_offset} = set, element) do
