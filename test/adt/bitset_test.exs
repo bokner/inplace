@@ -59,4 +59,83 @@ defmodule InPlace.BitSetTest do
     Enum.each(rand_values, fn val -> BitSet.put(bitset, val) end)
     assert Enum.sort(rand_values, :desc) == BitSet.iterate(bitset, [], iterator_fun)
   end
+
+  test "subset?" do
+    set1 = BitSet.new(-10, 10)
+    set2 = BitSet.new(-10, 10)
+    assert BitSet.subset?(set1, set2)
+    BitSet.put(set1, Enum.random(-10..10))
+    refute BitSet.subset?(set1, set2)
+    assert BitSet.subset?(set2, set1)
+  end
+
+  test "equal?" do
+    set1 = BitSet.new(1, 10)
+    set2 = BitSet.new(-10, 10)
+    assert BitSet.equal?(set1, set2)
+    Enum.each(1..10, fn val ->
+      BitSet.put(set1, val)
+      BitSet.put(set2, val)
+    end)
+    assert BitSet.equal?(set1, set2)
+    s = Enum.random([set1, set2])
+    BitSet.delete(s, Enum.random(1..10))
+    refute BitSet.equal?(set1, set2)
+  end
+
+  test "disjoint?" do
+    set1 = BitSet.new(-10, 10)
+    set2 = BitSet.new(-10, 10)
+    assert BitSet.disjoint?(set1, set2)
+
+    {even_values, odd_values} = Enum.split_with(-10..10, fn x  -> rem(x, 2) == 0 end)
+    Enum.each(even_values, fn val -> BitSet.put(set1, val) end)
+    Enum.each(odd_values, fn val -> BitSet.put(set2, val) end)
+    assert BitSet.disjoint?(set1, set2)
+    BitSet.put(set1, Enum.random(odd_values))
+    refute BitSet.disjoint?(set1, set2)
+  end
+
+  test "intersection" do
+    set1 = BitSet.new(-10, 10)
+    set2 = BitSet.new(-10, 10)
+    intersection = BitSet.intersection(set1, set2)
+    assert BitSet.empty?(intersection)
+    {even_values, odd_values} = Enum.split_with(-10..10, fn x  -> rem(x, 2) == 0 end)
+    Enum.each(even_values, fn val -> BitSet.put(set1, val) end)
+    Enum.each(odd_values, fn val -> BitSet.put(set2, val) end)
+
+    intersection = BitSet.intersection(set1, set2)
+    assert BitSet.empty?(intersection)
+
+    random_even = Enum.random(even_values)
+    random_odd = Enum.random(odd_values)
+    BitSet.put(set1, random_odd)
+    BitSet.put(set2, random_even)
+    intersection = BitSet.intersection(set1, set2)
+    assert BitSet.to_list(intersection) == [random_even, random_odd] |> Enum.sort()
+
+  end
+
+  test "union" do
+    set1 = BitSet.new(-10, 10)
+    set2 = BitSet.new(-10, 10)
+    union = BitSet.union(set1, set2)
+    assert BitSet.empty?(union)
+    {even_values, odd_values} = Enum.split_with(-10..10, fn x  -> rem(x, 2) == 0 end)
+    Enum.each(even_values, fn val -> BitSet.put(set1, val) end)
+    Enum.each(odd_values, fn val -> BitSet.put(set2, val) end)
+    union = BitSet.union(set1, set2)
+    assert BitSet.to_list(union) == Enum.to_list(-10..10)
+  end
+
+  test "filter" do
+    set = BitSet.new(-10, 10)
+    Enum.each(-10..10, fn val -> BitSet.put(set, val) end)
+    {even_values, odd_values} = Enum.split_with(-10..10, fn x  -> rem(x, 2) == 0 end)
+    even_set = BitSet.filter(set, fn x  -> rem(x, 2) == 0 end)
+    odd_set = BitSet.filter(set, fn x  -> rem(x, 2) in [-1, 1] end)
+    assert BitSet.to_list(even_set) == even_values
+    assert BitSet.to_list(odd_set) == odd_values
+  end
 end
