@@ -14,6 +14,7 @@ Currently implemented:
 - heaps
 - priority queues
 - linked lists
+- bitsets
 
 
 Check out the implementation of [X algorithm by Donald Knuth](https://en.wikipedia.org/wiki/Knuth%27s_Algorithm_X), accompanied by the [implementation of Sudoku]() as an example of usage.
