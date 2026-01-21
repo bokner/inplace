@@ -7,6 +7,7 @@ defmodule InPlace.Examples.Sudoku do
   any other values represent hidden cells.
   """
   alias InPlace.ExactCover
+  alias InPlace.BitSet
   require Logger
   @numbers ?1..?9
 
@@ -68,25 +69,27 @@ defmodule InPlace.Examples.Sudoku do
     ## for hidden cells, plus one that matches open cells
     ##
 
-    {_position, options, covered_set} =
-      for <<cell <- instance>>, reduce: {0, [], MapSet.new()} do
-        {cell_number, options_acc, covered_acc} ->
+    covered_set = BitSet.new(0, d * d * 4)
+    {_position, options} =
+      for <<cell <- instance>>, reduce: {0, []} do
+        {cell_number, options_acc} ->
+          {cell_number + 1,
           if hidden_cell?(cell) do
-            {cell_number + 1,
              Enum.reduce(0..(d - 1), options_acc, fn value, opt_acc ->
-              opt = create_option(cell_number * d + value, d)
-               [opt | opt_acc]
-             end), covered_acc}
+              [create_option(cell_number * d + value, d) | opt_acc]
+             end)
           else
-            {cell_number + 1, options_acc,
-             MapSet.union(
-               covered_acc,
-               create_option(cell_number * d + cell_value(cell) - 1, d)
-             )}
+            Enum.each(
+              create_option(cell_number * d + cell_value(cell) - 1, d),
+              fn val -> BitSet.put(covered_set, val) end)
+            options_acc
           end
+        }
       end
 
-    Enum.filter(options, fn opt -> MapSet.disjoint?(opt, covered_set) end)
+    Enum.reject(options, fn opt ->
+      Enum.any?(opt, fn val -> BitSet.member?(covered_set, val) end)
+    end)
   end
 
   defp hidden_cell?(ascii_code) do
@@ -99,8 +102,13 @@ defmodule InPlace.Examples.Sudoku do
       row_item(row, d),
       column_item(row, d),
       block_item(row, d)
-    ] |> MapSet.new()
+    ]
   end
+
+  # defp maybe_add_option(row, d, covered_set) do
+  #   option = create_option(row, d)
+  #   Enum.any?(option, fn item -> BitSet.member?(covered_set, item) end) && false || option
+  # end
 
   defp cell_value(ascii_code) do
     ascii_code - 48
@@ -157,7 +165,7 @@ defmodule InPlace.Examples.Sudoku do
 
     solution
     |> Enum.map(fn opt_idx ->
-      [_, r, c, _] = Enum.at(options, opt_idx) |> MapSet.to_list()
+      [_, r, c, _] = Enum.at(options, opt_idx)
 
       {val, row, col} =
         {
