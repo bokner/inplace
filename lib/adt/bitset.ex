@@ -50,11 +50,8 @@ defmodule InPlace.BitSet do
       :ok
     else
       :bit_vector.set(bit_vector, position)
-      ## TODO: look into element value
-      update_max(set, element)
       update_min(set, element)
-      ## end of TODO
-
+      update_max(set, element)
       Array.update(size, 1, fn current_size -> current_size + 1 end)
     end
   end
@@ -123,9 +120,25 @@ defmodule InPlace.BitSet do
 
   defp first_position(set) do
     if size(set) > 0 do
-      next_position(set, 1, -1)
+      next_position(set, 1, :lsb)
     end
   end
+
+  defp last_block(%{offset: value_offset} = set) do
+    case max(set) do
+      nil -> 0
+      max_value ->
+        value_address(max_value + value_offset)
+        |> elem(0)
+    end
+  end
+
+  defp get_block(%{bit_vector: {:bit_vector, atomics}} = _set, block_idx) do
+    ## Note: we do not use Array.get/2 here because of possible mix-up
+    ## between 0s and how Array differentiates between 0s and `nil`s
+    :atomics.get(atomics, block_idx)
+  end
+
 
   @doc """
   Find next position for {block_idx, block_offset}
@@ -142,21 +155,21 @@ defmodule InPlace.BitSet do
     next_position(set, block_idx, block_offset, nil)
   end
 
-  def next_position(%{last_index: last_idx} = _set, block_idx, _block_offset, _block_value)
-      when block_idx > last_idx do
-    nil
+  def next_position(set, block_idx, block_offset, block_value) do
+    if block_idx <= last_block(set) do
+      next_position_impl(set, block_idx, block_offset, block_value)
+    end
   end
 
   ## The beginning of a new block
-  def next_position(%{bit_vector: {:bit_vector, atomics}} = set, block_idx, -1, _block_value) do
-    case Array.get(atomics, block_idx) do
+  def next_position_impl(set, block_idx, :lsb, _block_value) do
+    case get_block(set, block_idx) do
       0 ->
-        next_position(set, block_idx + 1, -1)
-
+        next_position(set, block_idx + 1, :lsb)
       block_value ->
         case lsb(block_value) do
           nil ->
-            next_position(set, block_idx + 1, -1)
+            next_position(set, block_idx + 1, :lsb)
 
           lsb ->
             {block_idx, lsb, block_value}
@@ -164,16 +177,16 @@ defmodule InPlace.BitSet do
     end
   end
 
-  def next_position(
-        %{bit_vector: {:bit_vector, atomics}} = set,
+  def next_position_impl(
+        set,
         block_idx,
         block_offset,
         block_value
       ) do
-    case block_value || Array.get(atomics, block_idx) do
+    case block_value || get_block(set, block_idx) do
       0 ->
         ## nothing in this block, try next one.
-        next_position(set, block_idx + 1, -1)
+        next_position(set, block_idx + 1, :lsb)
 
       block_value ->
         ## Reset all leftmost bits up to block_offset
@@ -183,7 +196,7 @@ defmodule InPlace.BitSet do
 
         case block_tail |> lsb() do
           nil ->
-            next_position(set, block_idx + 1, -1)
+            next_position(set, block_idx + 1, :lsb)
 
           new_block_offset ->
             {block_idx, new_block_offset + shift, block_value}
@@ -270,6 +283,23 @@ defmodule InPlace.BitSet do
     end)
   end
 
+  def difference(set1, set2) do
+    filter(set1, fn val -> !member?(set2, val) end)
+  end
+
+  def symmetric_difference(set1, set2) do
+    lb = min(set1.lower_bound, set2.lower_bound)
+    ub = max(set1.upper_bound, set2.upper_bound)
+
+    new(lb, ub)
+    |> tap(fn sym_diff_set ->
+      iterate(set1, nil, fn val, _ -> put(sym_diff_set, val) end)
+      iterate(set2, nil, fn val, _ ->
+        member?(sym_diff_set, val) && delete(sym_diff_set, val) || put(sym_diff_set, val)
+      end)
+    end)
+  end
+
   def min(set) do
     if size(set) > 0 do
       min_impl(set)
@@ -280,7 +310,7 @@ defmodule InPlace.BitSet do
     Array.get(minmax, 1)
   end
 
-  def update_min(%{minmax: minmax} = set, value) do
+  defp update_min(%{minmax: minmax} = set, value) do
     if min_impl(set) > value do
       Array.put(minmax, 1, value)
     end
@@ -288,21 +318,21 @@ defmodule InPlace.BitSet do
     :ok
   end
 
-  def maybe_tighten_min(%{minmax: minmax} = set, removed_value) do
+  defp maybe_tighten_min(%{minmax: minmax} = set, removed_value) do
     if min_impl(set) == removed_value do
       Array.put(minmax, 1, find_min(set, removed_value) || Array.inf())
     end
   end
 
-  def find_min(
-        %{offset: value_offset, bit_vector: {:bit_vector, atomics}, last_index: last_idx} = set,
+  defp find_min(
+        %{offset: value_offset, last_index: last_idx} = set,
         starting_value
       ) do
     {min_block_idx, _min_block_offset} = value_address(starting_value + value_offset)
 
     _new_min_value =
       Enum.reduce_while(min_block_idx..last_idx, nil, fn block_idx, acc ->
-        case Array.get(atomics, block_idx) do
+        case get_block(set, block_idx) do
           0 ->
             {:cont, acc}
 
@@ -322,7 +352,7 @@ defmodule InPlace.BitSet do
     Array.get(minmax, 2)
   end
 
-  def update_max(%{minmax: minmax} = set, value) do
+  defp update_max(%{minmax: minmax} = set, value) do
     if max_impl(set) < value do
       Array.put(minmax, 2, value)
     end
@@ -330,21 +360,20 @@ defmodule InPlace.BitSet do
     :ok
   end
 
-  def maybe_tighten_max(%{minmax: minmax} = set, removed_value) do
+  defp maybe_tighten_max(%{minmax: minmax} = set, removed_value) do
     if max_impl(set) == removed_value do
       Array.put(minmax, 2, find_max(set, removed_value) || Array.negative_inf())
-      :todo
     end
 
     :ok
   end
 
-  def find_max(%{offset: value_offset, bit_vector: {:bit_vector, atomics}} = set, starting_value) do
+  defp find_max(%{offset: value_offset} = set, starting_value) do
     {max_block_idx, _max_block_offset} = value_address(starting_value + value_offset)
 
     _new_max_value =
       Enum.reduce_while(1..max_block_idx, nil, fn block_idx, acc ->
-        case Array.get(atomics, block_idx) do
+        case get_block(set, block_idx) do
           0 ->
             {:cont, acc}
 

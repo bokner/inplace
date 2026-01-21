@@ -114,7 +114,6 @@ defmodule InPlace.BitSetTest do
     BitSet.put(set2, random_even)
     intersection = BitSet.intersection(set1, set2)
     assert BitSet.to_list(intersection) == [random_even, random_odd] |> Enum.sort()
-
   end
 
   test "union" do
@@ -127,6 +126,37 @@ defmodule InPlace.BitSetTest do
     Enum.each(odd_values, fn val -> BitSet.put(set2, val) end)
     union = BitSet.union(set1, set2)
     assert BitSet.to_list(union) == Enum.to_list(-10..10)
+  end
+
+  test "difference" do
+    set = BitSet.new(-10, 10)
+    Enum.each(-10..10, fn val -> BitSet.put(set, val) end)
+    even_set = BitSet.filter(set, fn x  -> rem(x, 2) == 0 end)
+    odd_set = BitSet.filter(set, fn x  -> rem(x, 2) in [-1, 1] end)
+    assert BitSet.equal?(
+      BitSet.difference(set, even_set),
+      odd_set)
+
+    assert BitSet.empty?(BitSet.difference(even_set, set))
+    assert BitSet.empty?(BitSet.difference(odd_set, set))
+  end
+
+  test "symmetric difference" do
+    set1 = BitSet.new(-10, 10)
+    set2 = BitSet.new(-10, 10)
+    symdiff_set = BitSet.symmetric_difference(set1, set2)
+    assert BitSet.empty?(symdiff_set)
+    {even_values, odd_values} = Enum.split_with(-10..10, fn x  -> rem(x, 2) == 0 end)
+    Enum.each(even_values, fn val -> BitSet.put(set1, val) end)
+    Enum.each(odd_values, fn val -> BitSet.put(set2, val) end)
+    symdiff_set = BitSet.symmetric_difference(set1, set2)
+    assert BitSet.to_list(symdiff_set) == Enum.to_list(-10..10)
+    ## Example from `h MapSet.symmetric_difference
+    s1 = BitSet.new(1, 3)
+    s2 = BitSet.new(2, 4)
+    Enum.each([1, 2, 3], fn val -> BitSet.put(s1, val) end)
+    Enum.each([2, 3, 4], fn val -> BitSet.put(s2, val) end)
+    assert BitSet.symmetric_difference(s1, s2) |> BitSet.to_list() == [1, 4]
   end
 
   test "filter" do
