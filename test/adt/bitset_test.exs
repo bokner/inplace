@@ -42,7 +42,7 @@ defmodule InPlace.BitSetTest do
     lb = -100
     ub = 100
     bitset = BitSet.new(lb, ub)
-    rand_values = Enum.take_random(lb..ub, Enum.random(1..(ub - lb)))
+    rand_values = Enum.take_random(lb..ub, Enum.random(2..(ub - lb)))
     Enum.each(rand_values, fn val -> BitSet.put(bitset, val) end)
     sorted_rand_values = Enum.sort(rand_values)
     assert Enum.all?(0..length(rand_values) - 2,
@@ -55,7 +55,7 @@ defmodule InPlace.BitSetTest do
     bitset = BitSet.new(lb, ub)
     iterator_fun = fn value, acc -> [value | acc] end
     assert Enum.empty?(BitSet.iterate(bitset, [], iterator_fun))
-    rand_values = Enum.take_random(lb..ub, Enum.random(1..ub - lb))
+    rand_values = Enum.take_random(lb..ub, Enum.random(2..ub - lb))
     Enum.each(rand_values, fn val -> BitSet.put(bitset, val) end)
     assert Enum.sort(rand_values, :desc) == BitSet.iterate(bitset, [], iterator_fun)
   end
