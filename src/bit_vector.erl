@@ -6,8 +6,7 @@
 % Allocate atomics to contain the data + 2 bytes for min and max
 new(Size) ->
     Words = (Size + 63) div 64,
-    Atomics = atomics:new(Words + 1, [{signed, false}]),
-    atomics:put(Atomics, Words + 1, 0), %% Set 'min_max' to lowest possible
+    Atomics = atomics:new(Words, [{signed, false}]),
     {?MODULE, Atomics}.
 
     
