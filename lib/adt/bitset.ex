@@ -21,7 +21,7 @@ defmodule InPlace.BitSet do
       last_index: :atomics.info(atomics).size,
       size: Array.new(1, 0),
       minmax:
-        Array.new(2)
+        Array.new(2, 0)
         |> tap(fn arr ->
           Array.put(arr, 1, Array.inf())
           Array.put(arr, 2, Array.negative_inf())

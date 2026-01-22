@@ -2,10 +2,19 @@ defmodule InPlace.Array do
   import Bitwise
   @null (1 <<< 63) - 1
 
-  def new(size, initial_value \\ @null) do
+  @doc """
+  Initializes array of size `size`.
+  `initial_value` will be used to set up the initial value for array elements.
+  """
+  def new(size, initial_value \\ @null)
+
+  def new(size, 0) do
     :atomics.new(size, signed: true)
+  end
+
+  def new(size, initial_value) do
+    new(size, 0)
     |> tap(fn ref ->
-      initial_value != 0 &&
         Enum.each(1..size, fn idx -> put(ref, idx, initial_value) end)
     end)
   end

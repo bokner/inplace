@@ -20,19 +20,16 @@ defmodule InPlace.Heap do
   def new(capacity, opts \\ []) do
     opts = Keyword.merge(default_opts(), opts)
 
-    Array.new(capacity + 1)
-    |> then(fn ref ->
-      Array.put(ref, capacity + 1, 0)
+    ref = Array.new(capacity + 1, 0)
 
       %{
         capacity: capacity,
         array: ref,
-        index_positions: Array.new(capacity),
-        position_indices: Array.new(capacity),
+        index_positions: Array.new(capacity, 0),
+        position_indices: Array.new(capacity, Array.null()),
         comparator: Keyword.get(opts, :comparator),
         getter: Keyword.get(opts, :getter)
       }
-    end)
   end
 
   def default_opts() do

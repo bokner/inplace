@@ -77,8 +77,8 @@ defmodule InPlace.ExactCover do
         deletion: :hide
       )
 
-    option_counts = Array.new(num_items)
-    min_option_item = Array.new(2)
+    option_counts = Array.new(num_items, 0)
+    min_option_item = Array.new(2, 0)
 
     item_lists_ll =
       LinkedList.new(Enum.to_list(1..(entry_count + num_items)), deletion: :hide)
@@ -103,7 +103,7 @@ defmodule InPlace.ExactCover do
         update_min_item(min_option_item, min_option_idx, min_option_count)
       end)
 
-    top = Array.new(num_items + entry_count)
+    top = Array.new(num_items + entry_count, 0)
     LinkedList.iterate(
         item_header,
         fn p ->
@@ -475,7 +475,7 @@ defmodule InPlace.ExactCover do
     ## option membership is in reverse order, i.e. the members that belong to the first
     ## option are in the end of the membership list.
     l = length(option_membership)
-    arr = Array.new(l)
+    arr = Array.new(l, 0)
 
     Enum.reduce(option_membership, l, fn idx, acc ->
       Array.put(arr, acc, idx)
