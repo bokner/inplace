@@ -2,8 +2,6 @@
 
 -export([new/1, get/2, set/2, clear/2, flip/2, print/1]).
 
-
-% Allocate atomics to contain the data + 2 bytes for min and max
 new(Size) ->
     Words = (Size + 63) div 64,
     Atomics = atomics:new(Words, [{signed, false}]),
