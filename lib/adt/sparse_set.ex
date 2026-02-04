@@ -54,6 +54,10 @@ defmodule InPlace.SparseSet do
     Array.get(size, 1)
   end
 
+  def empty?(set) do
+    size(set) == 0
+  end
+
   def member?(set, el) do
     member_impl(set, el) && true
   end

@@ -7,6 +7,7 @@ defmodule InPlace.SparseSetTest do
     domain_size = 100
     set = SparseSet.new(domain_size)
     assert SparseSet.size(set) == domain_size
+    refute SparseSet.empty?(set)
     assert Enum.all?(1..SparseSet.size(set), fn el -> SparseSet.member?(set, el) end)
 
     ## Deletion
@@ -18,6 +19,7 @@ defmodule InPlace.SparseSetTest do
     end)
 
     assert SparseSet.size(set) == 0
+    assert SparseSet.empty?(set)
     refute SparseSet.delete(set, Enum.random(1..domain_size))
 
     ## Undeletion
