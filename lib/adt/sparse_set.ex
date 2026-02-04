@@ -7,8 +7,8 @@ defmodule InPlace.SparseSet do
     on the set, so we can use it for backtracking.
 
     NOTE:
-    The code is intentionally kept close to Knuth's style,
-    even it may not adhere to a conventional Elixir style.
+    The code is intentionally kept close to the material in above video,
+    even if it may not adhere to a conventional Elixir style.
 
     TODO: more details
   """
