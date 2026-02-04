@@ -10,36 +10,38 @@ defmodule InPlace.SparseSet do
     The code is intentionally kept close to the material in above video,
     even if it may not adhere to a conventional Elixir style.
 
-    TODO: more details
+    The set is a permutation on 1..domain_size.
+    Note: it's different from Knuth's implementation, where the set values are 0-based.
+
+    Options:
+    :mapper_fun - function of arity 2. Allows to associate elements of the set with values.
   """
 
   alias InPlace.Array
 
-  def new(capacity, opts \\ []) do
-    ## The elements of the set are initialized with
-    ## identity permutation
+  def new(domain_size, opts \\ []) do
     opts = Keyword.merge(default_opts(), opts)
 
-    dom = Array.new(capacity)
-    idom = Array.new(capacity)
-    Enum.each(1..capacity, fn el ->
+    dom = Array.new(domain_size)
+    idom = Array.new(domain_size)
+    Enum.each(1..domain_size, fn el ->
       Array.put(dom, el, el)
       Array.put(idom, el, el)
     end)
     size = Array.new(1)
-    Array.put(size, 1, capacity)
+    Array.put(size, 1, domain_size)
     %{
       dom: dom,
       idom: idom,
       mapper: Keyword.get(opts, :mapper),
-      capacity: capacity,
+      dom_size: domain_size,
       size: size
     }
   end
 
   def delete(set, k) when is_integer(k) and k > 0 do
-    case member_impl(set, k) do
-      false -> false
+    case get_impl(set, k) do
+      nil -> false
       r -> delete_impl(set, r, k)
     end
   end
@@ -53,17 +55,19 @@ defmodule InPlace.SparseSet do
   end
 
   def member?(set, k) do
-    member_impl(set, k) && true
+    get_impl(set, k) && true
   end
 
-  defp member_impl(%{idom: idom} = set, k) do
+  defp get_impl(%{idom: idom} = set, k) do
     r = Array.get(idom, k)
-    r <= size(set) && r
+    if r <= size(set) do
+      r
+    end
   end
 
-  defp inc_size(%{size: size, capacity: capacity} = _set) do
+  defp inc_size(%{size: size} = _set) do
     Array.update(size, 1, fn s ->
-      min(capacity, s + 1)
+      s + 1
     end)
   end
 
@@ -82,8 +86,30 @@ defmodule InPlace.SparseSet do
 
   defp default_opts() do
     [
-      mapper: fn array, k -> Array.get(array.data, k) end
+      mapper: fn _set, el -> el end
     ]
   end
+
+  def iterate(set, acc, reducer) when is_function(reducer, 2) do
+    iterate_impl(set, acc, size(set), reducer)
+  end
+
+  defp iterate_impl(_set, acc, 0, _reducer) do
+    acc
+  end
+
+  defp iterate_impl(%{dom: dom} = set, acc, position, reducer) do
+    el = Array.get(dom, position)
+    case reducer.(el, acc) do
+      {:halt, acc2} -> acc2
+      {:cont, acc2} -> iterate_impl(set, acc2, position - 1, reducer)
+      acc2 -> iterate_impl(set, acc2, position - 1, reducer)
+    end
+  end
+
+  def to_list(set) do
+    iterate(set, [], fn el, acc -> [el | acc] end)
+  end
+
 
 end
