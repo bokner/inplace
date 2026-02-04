@@ -254,10 +254,6 @@ defmodule InPlace.ExactCover do
     )
   end
 
-  def first_item(%{item_header: item_header} = _state) do
-    LinkedList.head(item_header)
-  end
-
   def random_item(%{item_header: item_header} = _state) do
     header_size = LinkedList.size(item_header)
     random_position = Enum.random(1..header_size)
@@ -279,9 +275,6 @@ defmodule InPlace.ExactCover do
     {min_item, min_option_count} = get_min_item(state)
 
     if covered?(min_item, state) do
-      start = LinkedList.head(item_header)
-      start_count = get_item_options_count(state, start)
-
       LinkedList.iterate(
         item_header,
         fn p, {_min_p, min_acc} ->
@@ -295,7 +288,7 @@ defmodule InPlace.ExactCover do
               {p, min(count, min_acc)}
           end
         end,
-        initial_value: {start, start_count},
+        initial_value: {nil, nil},
         forward: true
       )
       |> then(fn {min_item, min_value} ->
@@ -442,8 +435,7 @@ defmodule InPlace.ExactCover do
           false
         )
       end,
-      state,
-      false
+      state
     )
   end
 
@@ -530,8 +522,7 @@ defmodule InPlace.ExactCover do
   defp iterate_column(
          column_pointer,
          iterator_fun,
-         %{item_header: item_header, item_lists: columns} = _state,
-         forward? \\ true
+         %{item_header: item_header, item_lists: columns} = _state
        ) do
     column_top = LinkedList.data(item_header, column_pointer)
 
@@ -543,8 +534,7 @@ defmodule InPlace.ExactCover do
         end
       end,
       start:
-        (forward? && LinkedList.next(columns, column_top)) || LinkedList.prev(columns, column_top),
-      forward: forward?
+        LinkedList.next(columns, column_top)
     )
   end
 
