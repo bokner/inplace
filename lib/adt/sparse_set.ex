@@ -37,10 +37,10 @@ defmodule InPlace.SparseSet do
     }
   end
 
-  def delete(%{idom: idom} = set, k) when is_integer(k) and k > 0 do
-    r = Array.get(idom, k)
-    if r <= size(set) do
-      delete_impl(set, r, k)
+  def delete(set, k) when is_integer(k) and k > 0 do
+    case member_impl(set, k) do
+      false -> false
+      r -> delete_impl(set, r, k)
     end
   end
 
@@ -50,6 +50,15 @@ defmodule InPlace.SparseSet do
 
   def size(%{size: size} = _set) do
     Array.get(size, 1)
+  end
+
+  def member?(set, k) do
+    member_impl(set, k) && true
+  end
+
+  defp member_impl(%{idom: idom} = set, k) do
+    r = Array.get(idom, k)
+    r <= size(set) && r
   end
 
   defp inc_size(%{size: size, capacity: capacity} = _set) do
