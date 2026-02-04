@@ -14,7 +14,7 @@ defmodule InPlace.SparseSet do
     Note: it's different from Knuth's implementation, where the set values are 0-based.
 
     Options:
-    :mapper_fun - function of arity 2. Allows to associate elements of the set with values.
+    :mapper - function of arity 2. Allows to associate elements of the set with values.
   """
 
   alias InPlace.Array
@@ -39,10 +39,10 @@ defmodule InPlace.SparseSet do
     }
   end
 
-  def delete(set, k) when is_integer(k) and k > 0 do
-    case get_impl(set, k) do
+  def delete(set, el) when is_integer(el) and el > 0 do
+    case member_impl(set, el) do
       nil -> false
-      r -> delete_impl(set, r, k)
+      r -> delete_impl(set, r, el)
     end
   end
 
@@ -54,12 +54,18 @@ defmodule InPlace.SparseSet do
     Array.get(size, 1)
   end
 
-  def member?(set, k) do
-    get_impl(set, k) && true
+  def member?(set, el) do
+    member_impl(set, el) && true
   end
 
-  defp get_impl(%{idom: idom} = set, k) do
-    r = Array.get(idom, k)
+  def get(%{mapper: mapper_fun} = set, el) do
+    if member_impl(set, el) do
+      mapper_fun.(set, el)
+    end
+  end
+
+  defp member_impl(%{idom: idom} = set, el) do
+    r = Array.get(idom, el)
     if r <= size(set) do
       r
     end
@@ -71,14 +77,14 @@ defmodule InPlace.SparseSet do
     end)
   end
 
-  defp delete_impl(%{dom: dom, idom: idom, size: size} = _set, r, k) do
+  defp delete_impl(%{dom: dom, idom: idom, size: size} = _set, r, el) do
     Array.update(size, 1, fn s ->
       if s > 1 do
         l = Array.get(dom, s)
         Array.put(dom, r, l)
         Array.put(idom, l, r)
-        Array.put(dom, s, k)
-        Array.put(idom, k, s)
+        Array.put(dom, s, el)
+        Array.put(idom, el, s)
       end
       s - 1
     end)

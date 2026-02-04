@@ -8,6 +8,7 @@ defmodule InPlace.SparseSetTest do
     set = SparseSet.new(domain_size)
     assert SparseSet.size(set) == domain_size
     assert Enum.all?(1..SparseSet.size(set), fn el -> SparseSet.member?(set, el) end)
+
     ## Deletion
     random_order = Enum.shuffle(1..domain_size)
     assert Enum.all?(random_order, fn el ->
@@ -15,8 +16,10 @@ defmodule InPlace.SparseSetTest do
       SparseSet.delete(set, el)
       size_before == SparseSet.size(set) + 1
     end)
+
     assert SparseSet.size(set) == 0
     refute SparseSet.delete(set, Enum.random(1..domain_size))
+
     ## Undeletion
     Enum.all?(1..domain_size, fn _ ->
       size_before = SparseSet.size(set)
@@ -24,6 +27,13 @@ defmodule InPlace.SparseSetTest do
       size_before == SparseSet.size(set) - 1
     end)
     assert SparseSet.size(set) == domain_size
+  end
+
+  test "get/2, mapper" do
+    domain_size = 100
+    set = SparseSet.new(domain_size, mapper: fn _set, el -> 2 * el end)
+    random_el = Enum.random(1..domain_size)
+    assert SparseSet.get(set, random_el) == 2 * random_el
   end
 
   test "iteration" do
