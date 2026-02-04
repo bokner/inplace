@@ -435,8 +435,7 @@ defmodule InPlace.ExactCover do
           false
         )
       end,
-      state,
-      false
+      state
     )
   end
 
@@ -523,8 +522,7 @@ defmodule InPlace.ExactCover do
   defp iterate_column(
          column_pointer,
          iterator_fun,
-         %{item_header: item_header, item_lists: columns} = _state,
-         forward? \\ true
+         %{item_header: item_header, item_lists: columns} = _state
        ) do
     column_top = LinkedList.data(item_header, column_pointer)
 
@@ -536,8 +534,7 @@ defmodule InPlace.ExactCover do
         end
       end,
       start:
-        (forward? && LinkedList.next(columns, column_top)) || LinkedList.prev(columns, column_top),
-      forward: forward?
+        LinkedList.next(columns, column_top)
     )
   end
 
