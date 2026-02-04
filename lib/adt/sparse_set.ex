@@ -100,6 +100,14 @@ defmodule InPlace.SparseSet do
     ]
   end
 
+  def reduce(set, acc, reducer) when is_function(reducer, 2) do
+    iterate(set, acc, reducer)
+  end
+
+  def each(set, action) when is_function(action, 1) do
+    reduce(set, :ok, fn el, _acc -> action.(el) end)
+  end
+
   def iterate(set, acc, reducer) when is_function(reducer, 2) do
     iterate_impl(set, acc, size(set), reducer)
   end

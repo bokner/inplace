@@ -38,16 +38,17 @@ defmodule InPlace.SparseSetTest do
     assert SparseSet.get(set, random_el) == 2 * random_el
   end
 
-  test "iteration" do
+  test "iteration (reduce)" do
     domain_size = 100
     set = SparseSet.new(domain_size)
     mapset = MapSet.new(1..domain_size)
     assert mapset == MapSet.new(SparseSet.to_list(set))
-    mapset_copy = SparseSet.iterate(set, MapSet.new, fn el, acc -> MapSet.put(acc, el) end)
+
+    mapset_copy = SparseSet.reduce(set, MapSet.new, fn el, acc -> MapSet.put(acc, el) end)
     assert mapset == mapset_copy
 
-    ## iterate with {:halt, _}
-    partial_set = SparseSet.iterate(set, MapSet.new(), fn el, acc ->
+    ## reduce with {:halt, _}
+    partial_set = SparseSet.reduce(set, MapSet.new(), fn el, acc ->
       if el == div(domain_size, 2) do
         {:halt, acc}
       else
