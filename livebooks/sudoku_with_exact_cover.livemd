@@ -3,7 +3,8 @@
 ```elixir
 Mix.install(
   [
-    :inplace,
+    {:inplace, path: Path.join(System.get_env("HOME"), "projects/inplace")},
+    #:inplace,
     :kino
   ]
 )
@@ -105,7 +106,9 @@ puzzle =
   #"090200800000000060000000000250000040000190000400080000000900208600003000000000100"
   #"020400000007000300000060000000200080060700000500000010100050000000003200000000704"  
   #"054001000000070080000000000600020004800000500000000901700000030000105000000900000"
-  "070500000012000000000040800000200460000700000300000000000000071600003000400080000"
+  #"070500000012000000000040800000200460000700000300000000000000071600003000400080000"
+  #"700800000000000021000000000060050003010020000000000400206003000000400810500000000"
+  "700000400000600050080000000206000030503000000000010000000502000000300800040000100"
 
 RenderHTML.render_sudoku(puzzle)
 
@@ -116,7 +119,7 @@ RenderHTML.render_sudoku(puzzle)
 
 ```elixir
 {tc, solution} = :timer.tc(fn -> Sudoku.solve(puzzle, 
-  checker: false,
+  checker: true,
   choose_item_fun: fn _, data -> InPlace.ExactCover.min_options_item(data) end,
   solution_handler: fn s -> send(self(), s) end) end)
 
@@ -153,10 +156,10 @@ puzzles = File.read!(Path.join("/Users/bokner/projects/cpsolver", puzzle_file))
 
 res = Enum.map(Enum.with_index(puzzles, 1), fn {p, idx} -> 
   {tc, _} = 
-  :timer.tc(fn -> Sudoku.solve(p, checker: false, 
-    choose_item_fun: fn _, data -> 
-      InPlace.ExactCover.min_options_item(data)
-    end,
+  :timer.tc(fn -> Sudoku.solve(p, checker: false,
+    # choose_item_fun: fn _, data -> 
+    #   InPlace.ExactCover.min_options_item(data)
+    #end,
     solution_handler: fn _ -> :ok end) end)
   |> tap(fn {tc, _idx} -> IO.puts("#{idx} : #{round(tc/1000)} ms") end)
 
