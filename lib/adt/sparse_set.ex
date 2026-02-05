@@ -105,7 +105,8 @@ defmodule InPlace.SparseSet do
   end
 
   def each(set, action) when is_function(action, 1) do
-    reduce(set, :ok, fn el, _acc -> action.(el) end)
+    reduce(set, nil, fn el, _acc -> action.(el) end)
+    :ok
   end
 
   def iterate(set, acc, reducer) when is_function(reducer, 2) do
