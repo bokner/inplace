@@ -1,7 +1,7 @@
 defmodule InPlace.SparseSetTest do
   use ExUnit.Case
 
-  alias InPlace.SparseSet
+  alias InPlace.{SparseSet, Array}
 
   test "new/1, delete/2, undelete/1" do
     domain_size = 100
@@ -15,7 +15,8 @@ defmodule InPlace.SparseSetTest do
     assert Enum.all?(random_order, fn el ->
       size_before = SparseSet.size(set)
       SparseSet.delete(set, el)
-      size_before == SparseSet.size(set) + 1
+      (size_before == SparseSet.size(set) + 1)
+      && assert_inverse(set)
     end)
 
     assert SparseSet.size(set) == 0
@@ -26,7 +27,8 @@ defmodule InPlace.SparseSetTest do
     Enum.all?(1..domain_size, fn _ ->
       size_before = SparseSet.size(set)
       SparseSet.undelete(set)
-      size_before == SparseSet.size(set) - 1
+      (size_before == SparseSet.size(set) - 1)
+      && assert_inverse(set)
     end)
     assert SparseSet.size(set) == domain_size
   end
@@ -58,6 +60,15 @@ defmodule InPlace.SparseSetTest do
 
     assert MapSet.size(partial_set) == div(domain_size, 2)
 
+  end
+
+  defp assert_inverse(%{dom: dom, idom: idom, dom_size: dom_size} = set) do
+    SparseSet.size(set) == 0 ||
+    Enum.all?(1..dom_size, fn idx ->
+      Array.get(idom,
+        Array.get(dom, idx)
+      ) == idx
+    end)
   end
 
 end
