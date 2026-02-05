@@ -161,7 +161,7 @@ defmodule InPlace.ExactCover2 do
         ## Knuth:
         # Cover column c.
         ##
-        if get_item_options_count(state, c) > 0 do
+        if c do
           cover(c, state)
           ## Knuth:
           # For each r ← D[c], D[D[c]], . . . , while r != c,
@@ -261,13 +261,12 @@ defmodule InPlace.ExactCover2 do
 
       SparseSet.reduce(
         item_header, {nil, nil},
-        fn p, {_min_p, min_acc} ->
+        fn p, {_min_p, min_acc} = acc ->
           ## find min of option counts iterating over column (item) pointers
           case get_item_options_count(state, p) do
-            # it's a minimal count
-            count when count <= 1 ->
-              {:halt, {p, count}}
-
+            0 -> acc
+            1 ->
+              {:halt, {p, 1}}
             count ->
               {p, min(count, min_acc)}
           end
