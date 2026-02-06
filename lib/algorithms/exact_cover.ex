@@ -32,15 +32,15 @@ defmodule InPlace.ExactCover do
   def init(options) do
     ## Options are sets that contain item names.
     ## Build the state structures (roughly as described by D. Knuth)
-    {item_map, entry_count, option_lists, option_membership} =
+    {item_map, entry_count, option_membership, option_ranges} =
       Enum.reduce(
-        Enum.with_index(options, 1), {Map.new(), 0, [], []},
+        Enum.with_index(options, 1), {Map.new(), 0, [], Map.new()},
           fn {option, option_idx},
-              {directory, entry_idx, option_items, option_membership} = _acc ->
-        {directory, entry_count, items, membership} =
-          Enum.reduce(option, {directory, entry_idx, [], option_membership},
+              {directory, entry_idx, option_membership, option_ranges} = _acc ->
+        {directory, entry_count, membership} =
+          Enum.reduce(option, {directory, entry_idx, option_membership},
             fn item_name,
-                {dir_acc, entry_idx_acc, option_items_acc, membership_acc} ->
+                {dir_acc, entry_idx_acc, membership_acc} ->
             ## 1-based index, for convenience
             entry_idx_acc = entry_idx_acc + 1
 
@@ -49,12 +49,11 @@ defmodule InPlace.ExactCover do
                 [entry_idx_acc | entries]
               end),
               entry_idx_acc,
-              [entry_idx_acc | option_items_acc],
               [option_idx | membership_acc]
             }
           end)
 
-        {directory, entry_count, [items | option_items], membership}
+        {directory, entry_count, membership, Map.put(option_ranges, option_idx, {entry_idx+1, entry_count})}
       end)
 
     #IO.inspect(option_membership, label: :membership)
@@ -119,26 +118,13 @@ defmodule InPlace.ExactCover do
         end
       )
 
-    ## NOTE: we won't have to cover/uncover options, hence there is no "undoing" it
-    ## We also do not need extra entries for header pointers,
-    ## as was the case for item lists.
-    ##
-    option_lists_ll =
-      LinkedList.new(Enum.to_list(1..entry_count), deletion: :hide)
-      |> tap(fn ll ->
-        Enum.each(
-          option_lists,
-          fn items -> LinkedList.circuit(ll, items) end
-        )
-      end)
-
     %{
       item_header: item_header,
       option_member_ids: init_option_member_ids(option_membership),
+      option_ranges: option_ranges,
       item_names: item_names,
       top: top,
       item_lists: item_lists_ll,
-      option_lists: option_lists_ll,
       item_option_counts: %{counts: option_counts, min_item: min_option_item},
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
@@ -534,23 +520,27 @@ defmodule InPlace.ExactCover do
     )
   end
 
-  ## `row_pointer` is any pointer in the list of `option_lists` items.
-  ## `option_lists` is a linked list partitioned by option sublists
-  ## , each sublist represents an option.
+  ## `row_entry` is any option value that belongs to the item.
+  ## We get the full option given this entry,
+  ## then iterate over the option elements.
   defp iterate_row(
          row_pointer,
          iterator_fun,
-         %{option_lists: rows} = _state,
+         %{option_ranges: ranges} = state,
          forward? \\ true
        ) do
-    LinkedList.iterate(
-      rows,
-      fn p ->
-        if p != row_pointer, do: iterator_fun.(p)
-      end,
-      start: row_pointer,
-      forward: forward?
-    )
+    row_id = get_option_id(state, row_pointer)
+    {first, last} = Map.get(ranges, row_id)
+    range = if forward? do
+      first..last
+    else
+      last..first//-1
+    end
+
+    Enum.each(range, fn p -> if p != row_pointer, do: iterator_fun.(p) end)
+
+
+
   end
 
   defp column_pointer(item_name, %{item_names: item_names} = _state) do
