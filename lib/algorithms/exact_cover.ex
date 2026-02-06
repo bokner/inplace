@@ -545,7 +545,9 @@ defmodule InPlace.ExactCover do
        ) do
     LinkedList.iterate(
       rows,
-      fn p -> iterator_fun.(p) end,
+      fn p ->
+        if p != row_pointer, do: iterator_fun.(p)
+      end,
       start: row_pointer,
       forward: forward?
     )
