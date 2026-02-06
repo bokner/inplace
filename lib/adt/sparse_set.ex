@@ -63,9 +63,7 @@ defmodule InPlace.SparseSet do
   end
 
   def get(%{mapper: mapper_fun} = set, el) do
-    if member_impl(set, el) do
-      mapper_fun.(set, el)
-    end
+    mapper_fun.(set, el)
   end
 
   defp member_impl(%{idom: idom} = set, el) do

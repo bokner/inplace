@@ -59,7 +59,15 @@ defmodule InPlace.SparseSetTest do
     end)
 
     assert MapSet.size(partial_set) == div(domain_size, 2)
+  end
 
+  test "iteration (each)" do
+    size = 10
+    arr = Array.new(10, 0)
+    assert Array.to_list(arr) == List.duplicate(0, size)
+    set = SparseSet.new(size)
+    SparseSet.each(set, fn idx -> Array.put(arr, idx, 1) end)
+    assert Array.to_list(arr) == List.duplicate(1, size)
   end
 
   defp assert_inverse(%{dom: dom, idom: idom, dom_size: dom_size} = set) do
