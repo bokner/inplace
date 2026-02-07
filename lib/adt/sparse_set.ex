@@ -63,9 +63,7 @@ defmodule InPlace.SparseSet do
   end
 
   def get(%{mapper: mapper_fun} = set, el) do
-    if member_impl(set, el) do
-      mapper_fun.(set, el)
-    end
+    mapper_fun.(set, el)
   end
 
   defp member_impl(%{idom: idom} = set, el) do
@@ -75,9 +73,11 @@ defmodule InPlace.SparseSet do
     end
   end
 
-  defp inc_size(%{size: size} = _set) do
+  defp inc_size(%{size: size, dom_size: dom_size} = _set) do
     Array.update(size, 1, fn s ->
-      s + 1
+      if s < dom_size do
+        s + 1
+      end
     end)
   end
 

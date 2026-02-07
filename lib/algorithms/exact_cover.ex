@@ -7,7 +7,7 @@ defmodule InPlace.ExactCover do
   (The Art of Computer Programming, vol. 4B, by Donald Knuth).
   It differs mostly by using more advanced internal state structure.
   """
-  alias InPlace.{LinkedList, Array}
+  alias InPlace.{LinkedList, Array, SparseSet}
 
   def solve(options, solver_opts \\ []) do
     state = init(options)
@@ -32,15 +32,15 @@ defmodule InPlace.ExactCover do
   def init(options) do
     ## Options are sets that contain item names.
     ## Build the state structures (roughly as described by D. Knuth)
-    {item_map, entry_count, option_lists, option_membership} =
+    {item_map, entry_count, option_membership, option_ranges} =
       Enum.reduce(
-        Enum.with_index(options, 1), {Map.new(), 0, [], []},
+        Enum.with_index(options, 1), {Map.new(), 0, [], Map.new()},
           fn {option, option_idx},
-              {directory, entry_idx, option_items, option_membership} = _acc ->
-        {directory, entry_count, items, membership} =
-          Enum.reduce(option, {directory, entry_idx, [], option_membership},
+              {directory, entry_idx, option_membership, option_ranges} = _acc ->
+        {directory, entry_count, membership} =
+          Enum.reduce(option, {directory, entry_idx, option_membership},
             fn item_name,
-                {dir_acc, entry_idx_acc, option_items_acc, membership_acc} ->
+                {dir_acc, entry_idx_acc, membership_acc} ->
             ## 1-based index, for convenience
             entry_idx_acc = entry_idx_acc + 1
 
@@ -49,12 +49,11 @@ defmodule InPlace.ExactCover do
                 [entry_idx_acc | entries]
               end),
               entry_idx_acc,
-              [entry_idx_acc | option_items_acc],
               [option_idx | membership_acc]
             }
           end)
 
-        {directory, entry_count, [items | option_items], membership}
+        {directory, entry_count, membership, Map.put(option_ranges, option_idx, {entry_idx+1, entry_count})}
       end)
 
     #IO.inspect(option_membership, label: :membership)
@@ -63,8 +62,8 @@ defmodule InPlace.ExactCover do
     {item_names, item_lists} = Enum.unzip(item_map)
 
     item_header =
-      LinkedList.new(
-        Enum.map(1..num_items, fn header_idx ->
+      SparseSet.new(num_items,
+        mapper: fn _set, header_idx ->
           ## Header pointers.
           ## They will be used as the 'heads' of correspondent item lists.
           ## For the test example:
@@ -73,8 +72,7 @@ defmodule InPlace.ExactCover do
           ## Then the item list that corresponds to :c, will form
           ## a (17, 1, 8) circuit.
           header_idx + entry_count
-        end),
-        deletion: :hide
+        end
       )
 
     option_counts = Array.new(num_items, 0)
@@ -104,10 +102,10 @@ defmodule InPlace.ExactCover do
       end)
 
     top = Array.new(num_items + entry_count, 0)
-    LinkedList.iterate(
+    SparseSet.each(
         item_header,
         fn p ->
-          item_top = LinkedList.data(item_header, p)
+          item_top = SparseSet.get(item_header, p)
 
           LinkedList.iterate(
             item_lists_ll,
@@ -119,26 +117,13 @@ defmodule InPlace.ExactCover do
         end
       )
 
-    ## NOTE: we won't have to cover/uncover options, hence there is no "undoing" it
-    ## We also do not need extra entries for header pointers,
-    ## as was the case for item lists.
-    ##
-    option_lists_ll =
-      LinkedList.new(Enum.to_list(1..entry_count), deletion: :hide)
-      |> tap(fn ll ->
-        Enum.each(
-          option_lists,
-          fn items -> LinkedList.circuit(ll, items) end
-        )
-      end)
-
     %{
       item_header: item_header,
       option_member_ids: init_option_member_ids(option_membership),
+      option_ranges: option_ranges,
       item_names: item_names,
       top: top,
       item_lists: item_lists_ll,
-      option_lists: option_lists_ll,
       item_option_counts: %{counts: option_counts, min_item: min_option_item},
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
@@ -163,7 +148,7 @@ defmodule InPlace.ExactCover do
       ## Knuth:
       # If R[h] = h, print the current solution and return.
       ##
-      if LinkedList.empty?(item_header) do
+      if SparseSet.empty?(item_header) do
         solution(state, Keyword.get(solver_opts, :solution_handler))
       else
         ## Knuth:
@@ -252,19 +237,18 @@ defmodule InPlace.ExactCover do
   end
 
   def random_item(%{item_header: item_header} = _state) do
-    header_size = LinkedList.size(item_header)
+    header_size = SparseSet.size(item_header)
     random_position = Enum.random(1..header_size)
 
-    LinkedList.iterate(
-      item_header,
+    SparseSet.reduce(
+      item_header, 1,
       fn p, acc ->
         if acc == random_position do
           {:halt, p}
         else
           {:cont, acc + 1}
         end
-      end,
-      initial_value: 1
+      end
     )
   end
 
@@ -272,8 +256,8 @@ defmodule InPlace.ExactCover do
     {min_item, min_option_count} = get_min_item(state)
 
     if covered?(min_item, state) do
-      LinkedList.iterate(
-        item_header,
+      SparseSet.reduce(
+        item_header, {nil, nil},
         fn p, {_min_p, min_acc} = acc ->
           ## find min of option counts iterating over column (item) pointers
           case get_item_options_count(state, p) do
@@ -283,9 +267,7 @@ defmodule InPlace.ExactCover do
             count ->
               {p, min(count, min_acc)}
           end
-        end,
-        initial_value: {nil, nil},
-        forward: true
+        end
       )
       |> then(fn {min_item, min_value} ->
         if min_option_count > min_value do
@@ -350,46 +332,40 @@ defmodule InPlace.ExactCover do
     ## Knuth:
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
-
-    LinkedList.delete_pointer(item_header, column_pointer)
-    ## Knuth:
-    #  For each i ← D[c], D[D[c]] , . . . , while i != c,
-    ##
-    iterate_column(
-      column_pointer,
-      ## count of removed entries
+    if !covered?(column_pointer, state) do
+      SparseSet.delete(item_header, column_pointer)
       ## Knuth:
-      # For each j ← R[i], R[R[i]] , . . . , while j != i,
+      #  For each i ← D[c], D[D[c]] , . . . , while i != c,
       ##
-      fn i ->
-        iterate_row(
-          i,
-          fn j ->
-            ## Knuth:
-            # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
-            ##
-            if i != j do
-              LinkedList.delete_pointer(item_lists, j)
-              # and set S[C[j]]  ← S[C[j]]  − 1
-              decrease_option_count(state, j)
-            end
-          end,
-          state
-        )
-      end,
-      state
-    )
-  end
-
-  ## This variant of cover/2 is for debugging only.
-  ## We won't need to pass item name/id, passing item pointer
-  ## would be sufficient for the implementation
-  def cover(item_name, state) do
-    cover(column_pointer(item_name, state), state)
+      iterate_column(
+        column_pointer,
+        ## count of removed entries
+        ## Knuth:
+        # For each j ← R[i], R[R[i]] , . . . , while j != i,
+        ##
+        fn i ->
+          iterate_row(
+            i,
+            fn j ->
+              ## Knuth:
+              # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
+              ##
+              if i != j do
+                LinkedList.delete_pointer(item_lists, j)
+                # and set S[C[j]]  ← S[C[j]]  − 1
+                decrease_option_count(state, j)
+              end
+            end,
+            state
+          )
+        end,
+        state
+      )
+    end
   end
 
   defp covered?(column_pointer, %{item_header: item_header} = _state) do
-    LinkedList.pointer_deleted?(item_header, column_pointer)
+    !SparseSet.member?(item_header, column_pointer)
   end
 
   def uncover(
@@ -404,7 +380,7 @@ defmodule InPlace.ExactCover do
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
 
-    LinkedList.restore_pointer(item_header, column_pointer)
+    if SparseSet.undelete(item_header) do
     ## Knuth:
     #  For each i ← D[c], D[D[c]] , . . . , while i != c,
     ##
@@ -433,6 +409,7 @@ defmodule InPlace.ExactCover do
       end,
       state
     )
+    end
   end
 
   defp decrease_option_count(state, item_option_pointer) do
@@ -520,7 +497,7 @@ defmodule InPlace.ExactCover do
          iterator_fun,
          %{item_header: item_header, item_lists: columns} = _state
        ) do
-    column_top = LinkedList.data(item_header, column_pointer)
+    column_top = SparseSet.get(item_header, column_pointer)
 
     LinkedList.iterate(
       columns,
@@ -530,29 +507,28 @@ defmodule InPlace.ExactCover do
         end
       end,
       start:
-        LinkedList.next(columns, column_top)
+        column_top
     )
   end
 
-  ## `row_pointer` is any pointer in the list of `option_lists` items.
-  ## `option_lists` is a linked list partitioned by option sublists
-  ## , each sublist represents an option.
+  ## `row_entry` is any option value that belongs to the item.
+  ## We get the full option given this entry,
+  ## then iterate over the option elements.
   defp iterate_row(
          row_pointer,
          iterator_fun,
-         %{option_lists: rows} = _state,
+         %{option_ranges: ranges} = state,
          forward? \\ true
        ) do
-    LinkedList.iterate(
-      rows,
-      fn p -> iterator_fun.(p) end,
-      start: row_pointer,
-      forward: forward?
-    )
+    row_id = get_option_id(state, row_pointer)
+    {first, last} = Map.get(ranges, row_id)
+    range = if forward? do
+      first..last
+    else
+      last..first//-1
+    end
+
+    Enum.each(range, fn p -> if p != row_pointer, do: iterator_fun.(p) end)
   end
 
-  defp column_pointer(item_name, %{item_names: item_names} = _state) do
-    length(item_names) -
-      Enum.find_index(item_names, fn name -> name == item_name end)
-  end
 end
