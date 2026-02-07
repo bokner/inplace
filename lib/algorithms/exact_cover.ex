@@ -75,6 +75,12 @@ defmodule InPlace.ExactCover do
         end
       )
 
+    top = Array.new(entry_count, 0)
+    Enum.reduce(item_lists, 1, fn opts, idx ->
+      Enum.each(opts, fn o -> Array.put(top, o, idx) end)
+      idx + 1
+    end)
+
     option_counts = Array.new(num_items, 0)
     min_option_item = Array.new(2, 0)
 
@@ -100,22 +106,6 @@ defmodule InPlace.ExactCover do
         end)
         update_min_item(min_option_item, min_option_idx, min_option_count)
       end)
-
-    top = Array.new(num_items + entry_count, 0)
-    SparseSet.each(
-        item_header,
-        fn p ->
-          item_top = SparseSet.get(item_header, p)
-
-          LinkedList.iterate(
-            item_lists_ll,
-            fn s ->
-              Array.put(top, s, p)
-            end,
-            start: item_top
-          )
-        end
-      )
 
     %{
       item_header: item_header,
