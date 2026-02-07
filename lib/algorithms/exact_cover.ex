@@ -380,7 +380,7 @@ defmodule InPlace.ExactCover do
     # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
     ##
 
-    SparseSet.undelete(item_header)
+    if SparseSet.undelete(item_header) do
     ## Knuth:
     #  For each i ← D[c], D[D[c]] , . . . , while i != c,
     ##
@@ -409,6 +409,7 @@ defmodule InPlace.ExactCover do
       end,
       state
     )
+    end
   end
 
   defp decrease_option_count(state, item_option_pointer) do

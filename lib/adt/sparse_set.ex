@@ -73,9 +73,11 @@ defmodule InPlace.SparseSet do
     end
   end
 
-  defp inc_size(%{size: size} = _set) do
+  defp inc_size(%{size: size, dom_size: dom_size} = _set) do
     Array.update(size, 1, fn s ->
-      s + 1
+      if s < dom_size do
+        s + 1
+      end
     end)
   end
 

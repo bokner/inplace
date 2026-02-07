@@ -44,13 +44,16 @@ defmodule InPlace.Array do
   end
 
   defp update_loop(array, idx, current, update_fun) do
-    case :atomics.compare_exchange(array, idx, current, update_fun.(current)) do
+    updated_value = update_fun.(current)
+    if updated_value do
+    case :atomics.compare_exchange(array, idx, current, updated_value) do
       :ok ->
-        :ok
+        updated_value
 
       altered ->
         update_loop(array, idx, altered, update_fun)
     end
+  end
   end
 
   def swap(array, idx1, idx2) do
