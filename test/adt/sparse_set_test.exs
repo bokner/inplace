@@ -31,6 +31,7 @@ defmodule InPlace.SparseSetTest do
       && assert_inverse(set)
     end)
     assert SparseSet.size(set) == domain_size
+    refute SparseSet.undelete(set)
   end
 
   test "get/2, mapper" do
