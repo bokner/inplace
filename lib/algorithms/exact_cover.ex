@@ -61,18 +61,7 @@ defmodule InPlace.ExactCover do
     {item_names, item_lists} = Enum.unzip(item_map)
 
     item_header =
-      SparseSet.new(num_items,
-        mapper: fn _set, header_idx ->
-          ## Header pointers.
-          ## They will be used as the 'heads' of correspondent item lists.
-          ## For the test example:
-          ## `:c` item will be in the header with pointer 1 and content 17
-          ## (as there are 16 entries total across all option lists)
-          ## Then the item list that corresponds to :c, will form
-          ## a (17, 1, 8) circuit.
-          header_idx + entry_count
-        end
-      )
+      SparseSet.new(num_items)
 
     top = Array.new(entry_count, 0)
     option_counts = Array.new(num_items, 0)
