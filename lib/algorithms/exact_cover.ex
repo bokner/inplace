@@ -324,11 +324,9 @@ defmodule InPlace.ExactCover do
               ## Knuth:
               # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
               ##
-              if i != j do
-                SparseSet.delete(item_lists, j)
-                # and set S[C[j]]  ← S[C[j]]  − 1
-                decrease_option_count(state, j)
-              end
+              SparseSet.delete(item_lists, j)
+              # and set S[C[j]]  ← S[C[j]]  − 1
+              decrease_option_count(state, j)
             end,
             state
           )
@@ -371,12 +369,9 @@ defmodule InPlace.ExactCover do
             ## Knuth:
             # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
             ##
-            if i != j do
-              SparseSet.undelete(item_lists)
-
-              # and set S[C[j]]  ← S[C[j]]  − 1
-              increase_option_count(state, j)
-            end
+            SparseSet.undelete(item_lists)
+            # and set S[C[j]]  ← S[C[j]]  − 1
+            increase_option_count(state, j)
           end,
           state,
           false
