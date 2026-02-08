@@ -1,11 +1,8 @@
 defmodule InPlace.ExactCover do
   @moduledoc """
-  Implementation of Algorithm DLX (Exact cover via dancing links).
+  Implementation of Exact Cover.
   Based on https://arxiv.org/pdf/cs/0011047 by Donald Knuth.
-
-  Note: there is a never version of this algorithm
-  (The Art of Computer Programming, vol. 4B, by Donald Knuth).
-  It differs mostly by using more advanced internal state structure.
+  Modified to use "dancing cells" instead of "dancing links"
   """
   alias InPlace.{Array, SparseSet}
 
@@ -459,9 +456,7 @@ defmodule InPlace.ExactCover do
     Array.get(top, el)
   end
 
-  ## `column pointer` is a pointer in `item_header` linked list.
-  ## The element it points to is a 'top' of the column,
-  ## which is a pointer in `item_lists` linked list
+  ## `column pointer` is a pointer into `item_header` list.
   defp iterate_column(
          column_pointer,
          iterator_fun,
