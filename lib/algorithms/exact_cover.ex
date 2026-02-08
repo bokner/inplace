@@ -7,7 +7,7 @@ defmodule InPlace.ExactCover do
   (The Art of Computer Programming, vol. 4B, by Donald Knuth).
   It differs mostly by using more advanced internal state structure.
   """
-  alias InPlace.{LinkedList, Array, SparseSet}
+  alias InPlace.{Array, SparseSet}
 
   def solve(options, solver_opts \\ []) do
     state = init(options)
@@ -56,7 +56,6 @@ defmodule InPlace.ExactCover do
         {directory, entry_count, membership, Map.put(option_ranges, option_idx, {entry_idx+1, entry_count})}
       end)
 
-    #IO.inspect(option_membership, label: :membership)
     num_items = map_size(item_map)
     ## build item header, item and option lists
     {item_names, item_lists} = Enum.unzip(item_map)
@@ -75,47 +74,32 @@ defmodule InPlace.ExactCover do
         end
       )
 
+    top = Array.new(entry_count, 0)
     option_counts = Array.new(num_items, 0)
     min_option_item = Array.new(2, 0)
 
-    item_lists_ll =
-      LinkedList.new(Enum.to_list(1..(entry_count + num_items)), deletion: :hide)
-      |> tap(fn ll ->
-        {_, min_option_idx, min_option_count} =
-        item_lists
-        |> Enum.reduce({1, nil, nil}, fn options, {item_header_idx, min_option_idx, min_option_count} ->
-          item_top = entry_count + item_header_idx
+    {_, min_option_idx, min_option_count} =
+    Enum.reduce(item_lists, {1, nil, nil}, fn options, {item_idx, min_option_idx, min_option_count} ->
+      Enum.each(options, fn o -> Array.put(top, o, item_idx) end)
           num_options = length(options)
-          Array.put(option_counts, item_header_idx, num_options)
-          ## create sublists of options per item
-          item_options = [item_top | options]
-          LinkedList.circuit(ll, item_options)
+          Array.put(option_counts, item_idx, num_options)
           {min_option_idx, min_option_count} =
             if num_options < min_option_count do
-              {item_header_idx, num_options}
+              {item_idx, num_options}
             else
               {min_option_idx, min_option_count}
             end
-          {item_header_idx + 1, min_option_idx, min_option_count}
-        end)
-        update_min_item(min_option_item, min_option_idx, min_option_count)
-      end)
+          {item_idx + 1, min_option_idx, min_option_count}
 
-    top = Array.new(num_items + entry_count, 0)
-    SparseSet.each(
-        item_header,
-        fn p ->
-          item_top = SparseSet.get(item_header, p)
+    end)
+    update_min_item(min_option_item, min_option_idx, min_option_count)
 
-          LinkedList.iterate(
-            item_lists_ll,
-            fn s ->
-              Array.put(top, s, p)
-            end,
-            start: item_top
-          )
-        end
-      )
+    ## sparse-set for item lists
+    {_, item_options_map} = Enum.reduce(item_lists, {1, Map.new()}, fn options, {idx, acc} ->
+      {idx + 1, Map.put(acc, idx, options)}
+    end)
+
+    item_lists_ss = SparseSet.new(entry_count)
 
     %{
       item_header: item_header,
@@ -123,7 +107,8 @@ defmodule InPlace.ExactCover do
       option_ranges: option_ranges,
       item_names: item_names,
       top: top,
-      item_lists: item_lists_ll,
+      item_lists: item_lists_ss,
+      item_options: item_options_map,
       item_option_counts: %{counts: option_counts, min_item: min_option_item},
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
@@ -325,7 +310,7 @@ defmodule InPlace.ExactCover do
         column_pointer,
         %{
           item_header: item_header,
-          item_lists: item_lists
+          item_lists: item_lists,
         } = state
       )
       when is_integer(column_pointer) and column_pointer > 0 do
@@ -351,7 +336,7 @@ defmodule InPlace.ExactCover do
               # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
               ##
               if i != j do
-                LinkedList.delete_pointer(item_lists, j)
+                SparseSet.delete(item_lists, j)
                 # and set S[C[j]]  ← S[C[j]]  − 1
                 decrease_option_count(state, j)
               end
@@ -372,7 +357,7 @@ defmodule InPlace.ExactCover do
         column_pointer,
         %{
           item_header: item_header,
-          item_lists: item_lists
+          item_lists: item_lists,
         } = state
       )
       when is_integer(column_pointer) and column_pointer > 0 do
@@ -398,7 +383,8 @@ defmodule InPlace.ExactCover do
             # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
             ##
             if i != j do
-              LinkedList.restore_pointer(item_lists, j)
+              SparseSet.undelete(item_lists)
+
               # and set S[C[j]]  ← S[C[j]]  − 1
               increase_option_count(state, j)
             end
@@ -495,20 +481,15 @@ defmodule InPlace.ExactCover do
   defp iterate_column(
          column_pointer,
          iterator_fun,
-         %{item_header: item_header, item_lists: columns} = _state
+         %{item_lists: item_lists,
+         item_options: item_options} = _state
        ) do
-    column_top = SparseSet.get(item_header, column_pointer)
 
-    LinkedList.iterate(
-      columns,
-      fn column_element ->
-        if column_element != column_top do
-          iterator_fun.(column_element)
-        end
-      end,
-      start:
-        column_top
-    )
+    columns_ss = Map.get(item_options, column_pointer)
+
+    Enum.each(columns_ss, fn el ->
+      if SparseSet.member?(item_lists, el), do: iterator_fun.(el)
+    end)
   end
 
   ## `row_entry` is any option value that belongs to the item.
