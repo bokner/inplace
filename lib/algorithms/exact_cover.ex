@@ -54,6 +54,7 @@ defmodule InPlace.ExactCover do
       end)
 
     num_items = map_size(item_map)
+    num_options = length(options)
     ## build item header, item and option lists
     {item_names, item_lists} = Enum.unzip(item_map)
 
@@ -88,6 +89,8 @@ defmodule InPlace.ExactCover do
     item_lists_ss = SparseSet.new(entry_count)
 
     %{
+      num_items: num_items,
+      num_options: num_options,
       item_header: item_header,
       option_member_ids: init_option_member_ids(option_membership),
       option_ranges: option_ranges,
@@ -98,7 +101,7 @@ defmodule InPlace.ExactCover do
       item_option_counts: %{counts: option_counts, min_item: min_option_item},
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
-      solution: Array.new(length(options))
+      solution: Array.new(num_options, 0)
     }
   end
 
@@ -267,9 +270,9 @@ defmodule InPlace.ExactCover do
 
     Array.update(state.num_solutions, 1, fn n -> n + 1 end)
 
-    Enum.reduce_while(1..Array.size(solution), [], fn idx, acc ->
+    Enum.reduce_while(1..state.num_options, [], fn idx, acc ->
       case Array.get(solution, idx) do
-        nil ->
+        0 ->
           {:halt, acc}
 
         option_entry ->
@@ -368,13 +371,14 @@ defmodule InPlace.ExactCover do
             ## Knuth:
             # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
             ##
-            SparseSet.undelete(item_lists)
+            #SparseSet.undelete(item_lists)
             # and set S[C[j]]  ← S[C[j]]  − 1
             increase_option_count(state, j)
           end,
           state,
           false
         )
+        |> tap(fn num_options -> SparseSet.undelete(item_lists, num_options) end)
       end,
       state
     )
@@ -490,7 +494,17 @@ defmodule InPlace.ExactCover do
       last..first//-1
     end
 
-    Enum.each(range, fn p -> if p != row_pointer, do: iterator_fun.(p) end)
+    Enum.reduce(range, 0, fn p, acc ->
+      if p != row_pointer do
+       iterator_fun.(p)
+       acc + 1
+      else
+        acc
+      end
+    end)
+    ## Note: the result is only used for undeletion of multiple options;
+    ## otherwise, the side effect of iterator_fun call would be all we need
+    ##
   end
 
 end

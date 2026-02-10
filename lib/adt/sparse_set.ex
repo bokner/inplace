@@ -47,7 +47,11 @@ defmodule InPlace.SparseSet do
   end
 
   def undelete(set) do
-    inc_size(set)
+    undelete(set, 1)
+  end
+
+  def undelete(set, num) do
+    inc_size(set, num)
   end
 
   def size(%{size: size} = _set) do
@@ -73,12 +77,17 @@ defmodule InPlace.SparseSet do
     end
   end
 
-  defp inc_size(%{size: size, dom_size: dom_size} = _set) do
+  defp inc_size(%{size: size, dom_size: dom_size} = _set, increase) when is_integer(increase) and increase > 0 do
     Array.update(size, 1, fn s ->
-      if s < dom_size do
-        s + 1
+      s = s + increase
+      if s <= dom_size do
+        s
       end
     end)
+  end
+
+  defp inc_size(set, _) do
+    size(set)
   end
 
   defp delete_impl(%{dom: dom, idom: idom, size: size} = _set, r, el) do
