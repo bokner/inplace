@@ -210,24 +210,9 @@ defmodule InPlace.ExactCover do
     )
   end
 
-  def random_item(%{item_header: item_header} = _state) do
-    header_size = SparseSet.size(item_header)
-    random_position = Enum.random(1..header_size)
-
-    SparseSet.reduce(
-      item_header, 1,
-      fn p, acc ->
-        if acc == random_position do
-          {:halt, p}
-        else
-          {:cont, acc + 1}
-        end
-      end
-    )
-  end
 
   def min_options_item(%{item_header: item_header} = state) do
-    {min_item, min_option_count} = get_min_item(state)
+    {min_item, _min_option_count} = get_min_item(state)
 
     if covered?(min_item, state) do
       SparseSet.reduce(
@@ -245,11 +230,7 @@ defmodule InPlace.ExactCover do
       )
       |> then(fn
         nil -> nil
-        {min_item, min_value} ->
-        if min_option_count > min_value do
-           update_min_item(state, min_item, min_value)
-        end
-
+        {min_item, _min_value} ->
         min_item
       end)
     else
