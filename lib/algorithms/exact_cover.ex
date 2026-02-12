@@ -175,15 +175,11 @@ defmodule InPlace.ExactCover do
     iterate_row(
       option_pointer,
       fn j ->
-        cond do
-          j != option_pointer ->
+        if j != option_pointer do
             # Tricky; cover/2 expects header (not item) pointer,
             # so we need to convert
             get_top(state, j)
             |> cover(state)
-
-          true ->
-            :ok
         end
       end,
       state
@@ -194,15 +190,11 @@ defmodule InPlace.ExactCover do
     iterate_row(
       option_pointer,
       fn j ->
-        cond do
-          j != option_pointer ->
+        if  j != option_pointer do
             # Tricky; cover/2 expects header (not item) pointer,
             # so we need to convert
             get_top(state, j)
             |> uncover(state)
-
-          true ->
-            :ok
         end
       end,
       state,
