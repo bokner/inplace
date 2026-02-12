@@ -29,11 +29,11 @@ defmodule InPlace.ExactCover do
   def init(options) do
     ## Options are sets that contain item names.
     ## Build the state structures (roughly as described by D. Knuth)
-    {item_map, entry_count, option_membership, option_ranges} =
-      Enum.reduce(
-        Enum.with_index(options, 1), {Map.new(), 0, [], Map.new()},
-          fn {option, option_idx},
-              {directory, entry_idx, option_membership, option_ranges} = _acc ->
+    {_, item_map, entry_count, option_membership, option_ranges} =
+      Enum.reduce(options,
+        {1, Map.new(), 0, [], Map.new()},
+          fn option,
+              {option_idx, directory, entry_idx, option_membership, option_ranges} = _acc ->
         {directory, entry_count, membership} =
           Enum.reduce(option, {directory, entry_idx, option_membership},
             fn item_name,
@@ -50,7 +50,7 @@ defmodule InPlace.ExactCover do
             }
           end)
 
-        {directory, entry_count, membership, Map.put(option_ranges, option_idx, {entry_idx+1, entry_count})}
+        {option_idx + 1, directory, entry_count, membership, Map.put(option_ranges, option_idx, {entry_idx+1, entry_count})}
       end)
 
     num_items = map_size(item_map)
@@ -91,14 +91,17 @@ defmodule InPlace.ExactCover do
     %{
       num_items: num_items,
       num_options: num_options,
-      item_header: item_header,
+      item_header: item_header, ## Sparse set for tracking covered items
       option_member_ids: init_option_member_ids(option_membership),
-      option_ranges: option_ranges,
+      option_ranges: option_ranges, ## %{option_id => {first_entry_id, last_entry_id}
       item_names: item_names,
-      top: top,
-      item_lists: item_lists_ss,
-      item_options: item_options_map,
-      item_option_counts: %{counts: option_counts, min_item: min_option_item},
+      top: top, ## top[i] points to the element of item header for i-th entry
+      item_lists: item_lists_ss, ## Sparse set for entries (contains entry ids)
+      item_options: item_options_map, ## %{item_id => options}
+      item_option_counts: %{
+        counts: option_counts, ## Count of active (uncovered) options per item
+        min_item: min_option_item ## The item with minimal option count
+      },
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
       solution: Array.new(num_options, 0)
@@ -148,7 +151,6 @@ defmodule InPlace.ExactCover do
               # for each j ← R[r], R[R[r]], . . . , while j != r,
               #  cover column j
               ##
-              # {_num_covered_columns, _num_removed_entries} =
               cover_option_columns(r, state)
               search(k + 1, state)
               ## Knuth:
@@ -156,8 +158,6 @@ defmodule InPlace.ExactCover do
               #  uncover column j.
               ##
               uncover_option_columns(r, state)
-              # uncover(r, num_covered_columns, num_removed_entries, state)
-              # uncover(r, )
             end,
             state
           )
