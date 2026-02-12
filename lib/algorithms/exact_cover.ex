@@ -214,24 +214,38 @@ defmodule InPlace.ExactCover do
   def min_options_item(%{item_header: item_header} = state) do
     {min_item, _min_option_count} = get_min_item(state)
 
+
     if covered?(min_item, state) do
+      ## Note: we will go through all uncovered items
+      ## and find the item with the smallest number of 'covered' options.
+      ## We will also be updating global 'minimum' with the second smallest item,
+      ## as the "minimum" item will be covered, so won't be in the item set.
+      ##
       SparseSet.reduce(
-        item_header, {nil, nil},
-        fn p, {_min_p, min_acc} = _acc ->
+        item_header, {nil, nil, nil, nil},
+        fn p, {min_p, min_acc, _prev_min_p, _prev_min_acc} = acc ->
           ## find min of option counts iterating over column (item) pointers
           case get_item_options_count(state, p) do
             0 -> {:halt, nil}
             1 ->
               {:halt, {p, 1}}
             count ->
-              {p, min(count, min_acc)}
+              if count >= min_acc do
+                acc
+              else
+                {p, count, min_p, min_acc}
+              end
           end
         end
       )
       |> then(fn
-        nil -> nil
+          nil -> nil
         {min_item, _min_value} ->
-        min_item
+          min_item
+        {min_item, _min_value, second_min_item, second_min_value} ->
+            second_min_item && update_min_item(state, second_min_item, second_min_value)
+            min_item
+
       end)
     else
       min_item
