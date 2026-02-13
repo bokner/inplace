@@ -143,18 +143,6 @@ defmodule InPlace.Examples.Sudoku do
     end
   end
 
-  def instance4() do
-    "1000231000020200"
-  end
-
-  def instance9() do
-    "4...39.2..56............6.4......9..5..1..2...9..27.3..37............8.69.8.1...."
-  end
-
-  def instance29a_knuth() do
-    "..3.1....415....9.2.65..3..5...8...9.7.9...32.38..4.6....26.4.3...3....832...795."
-  end
-
   @doc """
     `solution` is a "cover" (list of indices into options
     built off the Sudoku instance).

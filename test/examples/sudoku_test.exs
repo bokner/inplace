@@ -6,7 +6,7 @@ defmodule InPlace.Examples.SudokuTest do
 
   describe "4x4" do
     test "instance with two solutions" do
-      Sudoku.solve(Sudoku.instance4(), solution_handler: async_solution_handler(), stop_on: false)
+      Sudoku.solve(instance4(), solution_handler: async_solution_handler(), stop_on: false)
 
       solutions = flush()
       assert length(solutions) == 2
@@ -16,7 +16,7 @@ defmodule InPlace.Examples.SudokuTest do
 
   describe "9x9" do
     test "easy" do
-      Sudoku.solve(Sudoku.instance29a_knuth(), solution_handler: async_solution_handler())
+      Sudoku.solve(instance29a_knuth(), solution_handler: async_solution_handler())
       solutions = flush()
       assert length(solutions) == 1
       assert Enum.all?(solutions, &Sudoku.check_solution/1)
@@ -39,6 +39,19 @@ defmodule InPlace.Examples.SudokuTest do
     def clue17() do
       "......8.16..2........7.5......6...2..1....3...8.......2......7..4..8....5...3...."
     end
+
+    def instance4() do
+      "1000231000020200"
+    end
+
+    def instance9() do
+      "4...39.2..56............6.4......9..5..1..2...9..27.3..37............8.69.8.1...."
+    end
+
+    def instance29a_knuth() do
+      "..3.1....415....9.2.65..3..5...8...9.7.9...32.38..4.6....26.4.3...3....832...795."
+    end
+
   end
 
   defp async_solution_handler() do
