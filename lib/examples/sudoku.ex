@@ -41,7 +41,7 @@ defmodule InPlace.Examples.Sudoku do
     ]
   end
 
-  def init(instance) when is_binary(instance) do
+  defp init(instance) when is_binary(instance) do
     l = String.length(instance)
     d = :math.sqrt(l) |> floor()
     if d * d != l, do: throw(:invalid_instance)
@@ -55,7 +55,7 @@ defmodule InPlace.Examples.Sudoku do
     }
   end
 
-  def init_exact_cover(instance, d) when is_binary(instance) do
+  defp init_exact_cover(instance, d) when is_binary(instance) do
     ## Turn the instance to a list of options
     ## columns (items in "exact-cover" terms):
     ## - one for each cell (d^2);
