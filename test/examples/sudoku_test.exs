@@ -15,19 +15,26 @@ defmodule InPlace.Examples.SudokuTest do
   end
 
   describe "9x9" do
-    test "easy" do
+    test "Knuth's example" do
       Sudoku.solve(instance29a_knuth(), solution_handler: async_solution_handler())
       solutions = flush()
       assert length(solutions) == 1
       assert Enum.all?(solutions, &Sudoku.check_solution/1)
     end
 
+    test "easy" do
+      Sudoku.solve(instance9(), solution_handler: async_solution_handler())
+      solutions = flush()
+      assert length(solutions) == 1
+      assert Enum.all?(solutions, &Sudoku.check_solution/1)
+    end
+
     test "'hard' and 'clue17'" do
-      assert Enum.all?([hard(), clue17()], fn instance ->
+      assert Enum.each([hard(), clue17()], fn instance ->
                Sudoku.solve(instance, solution_handler: async_solution_handler())
                solutions = flush()
 
-               length(solutions) == 1 &&
+               assert length(solutions) == 1 &&
                  Sudoku.check_solution(hd(solutions))
              end)
     end
