@@ -4,7 +4,7 @@ defmodule InPlace.ExactCover do
   Based on https://arxiv.org/pdf/cs/0011047 by Donald Knuth.
   Modified to use "dancing cells" instead of "dancing links"
   """
-  alias InPlace.{Array, SparseSet}
+  alias InPlace.{Array, SparseSet, Heap}
 
   def solve(options, solver_opts \\ []) do
     state = init(options)
@@ -88,6 +88,26 @@ defmodule InPlace.ExactCover do
 
     item_lists_ss = SparseSet.new(entry_count)
 
+    ## heap for option counts
+    option_counts_heap = Heap.new(num_items,
+      comparator: fn item1, item2 ->
+        cond do
+          item2 && covered?(item2, item_header) -> false
+          item1 && covered?(item1, item_header) -> false
+          true ->
+            item1 && item2 &&
+            Array.get(option_counts, item1) < Array.get(option_counts, item2)
+        end
+      end,
+      getter: fn nil -> nil
+        item_idx ->
+        case Array.get(option_counts, item_idx) do
+          nil -> {item_idx, 0}
+          val -> {item_idx, val}
+        end
+      end)
+    |> tap(fn h -> Enum.each(1..num_items, fn idx -> Heap.insert(h, idx) end) end)
+
     %{
       num_items: num_items,
       num_options: num_options,
@@ -100,7 +120,8 @@ defmodule InPlace.ExactCover do
       item_options: item_options_map, ## %{item_id => options}
       item_option_counts: %{
         counts: option_counts, ## Count of active (uncovered) options per item
-        min_item: min_option_item ## The item with minimal option count
+        min_item: min_option_item, ## The item with minimal option count
+        heap: option_counts_heap
       },
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
@@ -202,10 +223,28 @@ defmodule InPlace.ExactCover do
     )
   end
 
+  def min_options_item2(%{item_header: item_header} = state) do
+    h = state.item_option_counts.heap
+    #Heap.heapify(h)
+    case Heap.get_min(h) do
+      nil -> nil
+      {min_item, min_option_count}  ->
+
+        if covered?(min_item, state) && Heap.extract_min(h) do
+          min_options_item(state)
+        else
+          min_item
+        end
+      end
+  end
 
   def min_options_item(%{item_header: item_header} = state) do
-    {min_item, _min_option_count} = get_min_item(state)
+    h = state.item_option_counts.heap
 
+    #min1 = {min_item, min_option_count} = get_min_item(state)
+    {min_item, min_option_count} = Heap.get_min(h)
+    #min_item
+    #IO.inspect({min1, min2, Array.to_list(state.item_option_counts.counts)}, label: :compare)
 
     if covered?(min_item, state) do
       ## Note: we will go through all uncovered items
@@ -235,7 +274,7 @@ defmodule InPlace.ExactCover do
         {min_item, _min_value} ->
           min_item
         {min_item, _min_value, second_min_item, second_min_value} ->
-            second_min_item && update_min_item(state, second_min_item, second_min_value)
+            second_min_item #&& update_min_item(state, second_min_item, second_min_value)
             min_item
 
       end)
@@ -326,8 +365,13 @@ defmodule InPlace.ExactCover do
   end
 
   defp covered?(column_pointer, %{item_header: item_header} = _state) do
+    covered?(column_pointer, item_header)
+  end
+
+  defp covered?(column_pointer, item_header) do
     !SparseSet.member?(item_header, column_pointer)
   end
+
 
   def uncover(
         column_pointer,
@@ -381,17 +425,25 @@ defmodule InPlace.ExactCover do
       maybe_update_min_item(state, top, new_val)
       new_val
     end)
+    heap = state.item_option_counts.heap
+    item_heap_key = Heap.get_key_position(heap, top)
+    item_heap_key && Heap.sift_up(heap, item_heap_key)
+
   end
 
   def increase_option_count(state, item_option_pointer) do
     top = get_top(state, item_option_pointer)
     update_option_count(state, top, fn val -> val + 1 end)
+    heap = state.item_option_counts.heap
+    item_heap_key = Heap.get_key_position(heap, top)
+    Heap.sift_down(heap, item_heap_key)
   end
 
   ## 'update_fun/1' takes and updates current option count for given item header pointer
   def update_option_count(state, item_header_pointer, update_fun)
       when is_function(update_fun, 1) do
     Array.update(state.item_option_counts.counts, item_header_pointer, update_fun)
+
   end
 
   ## Mapping from 'absolute' option member ids (as in option_lists)
@@ -418,28 +470,27 @@ defmodule InPlace.ExactCover do
          item_pointer,
          option_count
        ) do
-    update_min_item(min_item, item_pointer, option_count)
+    #update_min_item(min_item, item_pointer, option_count)
   end
 
   defp update_min_item(min_item, item_pointer, option_count) do
-    Array.put(min_item, 1, item_pointer)
-    Array.put(min_item, 2, option_count)
+    #Array.put(min_item, 1, item_pointer)
+    #Array.put(min_item, 2, option_count)
   end
 
   defp get_min_item(%{item_option_counts: %{min_item: min_item}} = _state) do
     {Array.get(min_item, 1), Array.get(min_item, 2)}
+    #|> IO.inspect(label: :get_min_item)
   end
 
   defp maybe_update_min_item(state, item_pointer, option_count) do
-    if !covered?(item_pointer, state) do
-      {_current_min_item, current_min_count} = get_min_item(state)
+    {_current_min_item, current_min_count} = get_min_item(state)
 
-      if current_min_count > option_count ||
-          (current_min_count == option_count) do
-        update_min_item(state, item_pointer, option_count)
-      else
-        :ok
-      end
+    if current_min_count > option_count ||
+         (current_min_count == option_count && !covered?(item_pointer, state)) do
+      update_min_item(state, item_pointer, option_count)
+    else
+      :ok
     end
   end
 
