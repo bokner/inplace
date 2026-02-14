@@ -8,6 +8,7 @@ defmodule InPlace.Examples.Sudoku do
   """
   alias InPlace.ExactCover
   alias InPlace.BitSet
+  alias InPlace.Array
   require Logger
   @numbers ?1..?9
 
@@ -138,9 +139,14 @@ defmodule InPlace.Examples.Sudoku do
   end
 
   defp instance_to_array(instance) when is_binary(instance) do
-    for <<cell <- instance>> do
-      (hidden_cell?(cell) && 0) || cell_value(cell)
+    l = String.length(instance)
+    arr = Array.new(l, 0)
+    for <<cell <- instance>>, reduce: 1 do
+      acc ->
+        !hidden_cell?(cell) && Array.put(arr, acc, cell_value(cell))
+        acc + 1
     end
+    arr
   end
 
   @doc """
@@ -152,7 +158,7 @@ defmodule InPlace.Examples.Sudoku do
     grid_size = d * d
 
     solution
-    |> Enum.map(fn opt_idx ->
+    |> Enum.each(fn opt_idx ->
       [_, r, c, _] = Enum.at(options, opt_idx)
 
       {val, row, col} =
@@ -162,13 +168,9 @@ defmodule InPlace.Examples.Sudoku do
           div(c - 2 * grid_size, d)
         }
 
-      {row * d + col, val}
+      Array.put(instance, row * d + col + 1, val)
     end)
-    |> then(fn solved_values ->
-      Enum.reduce(solved_values, instance, fn {pos, value}, acc ->
-        List.replace_at(acc, pos, value)
-      end)
-    end)
+    Array.to_list(instance)
   end
 
   @spec check_solution([integer()]) :: boolean()
