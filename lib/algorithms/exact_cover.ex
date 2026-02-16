@@ -63,23 +63,13 @@ defmodule InPlace.ExactCover do
 
     top = Array.new(entry_count, 0)
     option_counts = Array.new(num_items, 0)
-    min_option_item = Array.new(2, 0)
 
-    {_, min_option_idx, min_option_count} =
-    Enum.reduce(item_lists, {1, nil, nil}, fn options, {item_idx, min_option_idx, min_option_count} ->
+    Enum.reduce(item_lists, 1, fn options, item_idx ->
       Enum.each(options, fn o -> Array.put(top, o, item_idx) end)
-          num_options = length(options)
-          Array.put(option_counts, item_idx, num_options)
-          {min_option_idx, min_option_count} =
-            if num_options < min_option_count do
-              {item_idx, num_options}
-            else
-              {min_option_idx, min_option_count}
-            end
-          {item_idx + 1, min_option_idx, min_option_count}
-
+      num_options = length(options)
+      Array.put(option_counts, item_idx, num_options)
+      item_idx + 1
     end)
-    update_min_item(min_option_item, min_option_idx, min_option_count)
 
     ## sparse-set for item lists
     {_, item_options_map} = Enum.reduce(item_lists, {1, Map.new()}, fn options, {idx, acc} ->
@@ -99,8 +89,7 @@ defmodule InPlace.ExactCover do
       item_lists: item_lists_ss, ## Sparse set for entries (contains entry ids)
       item_options: item_options_map, ## %{item_id => options}
       item_option_counts: %{
-        counts: option_counts, ## Count of active (uncovered) options per item
-        min_item: min_option_item ## The item with minimal option count
+        counts: option_counts ## Count of active (uncovered) options per item
       },
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
@@ -176,7 +165,9 @@ defmodule InPlace.ExactCover do
       option_pointer,
       fn j ->
         if j != option_pointer do
-            # Tricky; cover/2 expects header (not item) pointer,
+            ## Note: option pointer belongs to already covered item
+            ## , so we can skip on it
+            # Note2: cover/2 expects header (not item) pointer,
             # so we need to convert
             get_top(state, j)
             |> cover(state)
@@ -191,8 +182,6 @@ defmodule InPlace.ExactCover do
       option_pointer,
       fn j ->
         if  j != option_pointer do
-            # Tricky; cover/2 expects header (not item) pointer,
-            # so we need to convert
             get_top(state, j)
             |> uncover(state)
         end
@@ -204,18 +193,14 @@ defmodule InPlace.ExactCover do
 
 
   def min_options_item(%{item_header: item_header} = state) do
-    {min_item, _min_option_count} = get_min_item(state)
-
-
-    if covered?(min_item, state) do
       ## Note: we will go through all uncovered items
       ## and find the item with the smallest number of 'covered' options.
       ## We will also be updating global 'minimum' with the second smallest item,
       ## as the "minimum" item will be covered, so won't be in the item set.
       ##
       SparseSet.reduce(
-        item_header, {nil, nil, nil, nil},
-        fn p, {min_p, min_acc, _prev_min_p, _prev_min_acc} = acc ->
+        item_header, {nil, nil},
+        fn p, {_min_p, min_acc} = acc ->
           ## find min of option counts iterating over column (item) pointers
           case get_item_options_count(state, p) do
             0 -> {:halt, nil}
@@ -225,23 +210,16 @@ defmodule InPlace.ExactCover do
               if count >= min_acc do
                 acc
               else
-                {p, count, min_p, min_acc}
+                {p, count}
               end
           end
         end
       )
       |> then(fn
           nil -> nil
-        {min_item, _min_value} ->
-          min_item
-        {min_item, _min_value, second_min_item, second_min_value} ->
-            second_min_item && update_min_item(state, second_min_item, second_min_value)
+          {min_item, _min_value} ->
             min_item
-
       end)
-    else
-      min_item
-    end
   end
 
   defp get_item_options_count(state, item_pointer) do
@@ -326,6 +304,10 @@ defmodule InPlace.ExactCover do
   end
 
   defp covered?(column_pointer, %{item_header: item_header} = _state) do
+    covered?(column_pointer, item_header)
+  end
+
+  defp covered?(column_pointer, item_header) do
     !SparseSet.member?(item_header, column_pointer)
   end
 
@@ -376,10 +358,8 @@ defmodule InPlace.ExactCover do
     top = get_top(state, item_option_pointer)
 
     update_option_count(state, top, fn val ->
-      new_val = val - 1
+      val - 1
 
-      maybe_update_min_item(state, top, new_val)
-      new_val
     end)
   end
 
@@ -413,32 +393,6 @@ defmodule InPlace.ExactCover do
     Array.get(option_ids, option_entry)
   end
 
-  defp update_min_item(
-         %{item_option_counts: %{min_item: min_item}} = _state,
-         item_pointer,
-         option_count
-       ) do
-    update_min_item(min_item, item_pointer, option_count)
-  end
-
-  defp update_min_item(min_item, item_pointer, option_count) do
-    Array.put(min_item, 1, item_pointer)
-    Array.put(min_item, 2, option_count)
-  end
-
-  defp get_min_item(%{item_option_counts: %{min_item: min_item}} = _state) do
-    {Array.get(min_item, 1), Array.get(min_item, 2)}
-  end
-
-  defp maybe_update_min_item(state, item_pointer, option_count) do
-    {_current_min_item, current_min_count} = get_min_item(state)
-
-    if current_min_count > option_count do
-      update_min_item(state, item_pointer, option_count)
-    else
-      :ok
-    end
-  end
 
   defp get_top(%{top: top} = _state, el) do
     get_top(top, el)
