@@ -3,6 +3,8 @@ defmodule InPlace.ExactCover do
   Implementation of Exact Cover.
   Based on https://arxiv.org/pdf/cs/0011047 by Donald Knuth.
   Modified to use "dancing cells" instead of "dancing links"
+  for Dancing cells, see:
+  YouTube: "Stanford Lecture: Dr. Don Knuth - Dancing Cells (2023)"
   """
   alias InPlace.{Array, SparseSet}
 
@@ -21,7 +23,13 @@ defmodule InPlace.ExactCover do
   defp default_solver_opts() do
     [
       solution_handler: fn options -> IO.inspect(options, label: :solution) end,
-      choose_item_fun: fn _step, state -> min_options_item(state) end,
+      choose_item_fun: fn step, state ->
+        if step == 1 do
+          state.start_with
+        else
+          min_options_item(state)
+        end
+      end,
       stop_on: fn state -> num_solutions(state) == 1 end
     ]
   end
@@ -64,11 +72,16 @@ defmodule InPlace.ExactCover do
     top = Array.new(entry_count, 0)
     option_counts = Array.new(num_items, 0)
 
-    Enum.reduce(item_lists, 1, fn options, item_idx ->
+    {_, start_with, _} = Enum.reduce(item_lists, {1, nil, nil}, fn options, {item_idx, min_item, min_count} ->
       Enum.each(options, fn o -> Array.put(top, o, item_idx) end)
       num_options = length(options)
       Array.put(option_counts, item_idx, num_options)
-      item_idx + 1
+      {min_item, min_count} = if num_options < min_count do
+        {item_idx, num_options}
+      else
+        {min_item, min_count}
+      end
+      {item_idx + 1, min_item, min_count}
     end)
 
     ## sparse-set for item lists
@@ -91,6 +104,7 @@ defmodule InPlace.ExactCover do
       item_option_counts: %{
         counts: option_counts ## Count of active (uncovered) options per item
       },
+      start_with: start_with,
       num_solutions: Array.new(1, 0),
       ## buffer for building current solution
       solution: Array.new(num_options, 0)
@@ -133,14 +147,14 @@ defmodule InPlace.ExactCover do
             c,
             fn r ->
               ## Knuth:
-              #   set O[k] ← r;
-              ##
-              add_to_solution(solution, k, r)
-              ## Knuth:
               # for each j ← R[r], R[R[r]], . . . , while j != r,
               #  cover column j
               ##
               cover_option_columns(r, state)
+              ## Knuth:
+              #   set O[k] ← r;
+              ##
+              add_to_solution(solution, k, r)
               search(k + 1, state)
               ## Knuth:
               # for each j ← L[r], L[L[r]], . . . , while j != r,
@@ -262,7 +276,7 @@ defmodule InPlace.ExactCover do
   ## from which we will handle (reduce) the options
   ## associated with the item.
   ##
-  def cover(
+  defp cover(
         column_pointer,
         %{
           item_header: item_header,
@@ -311,7 +325,7 @@ defmodule InPlace.ExactCover do
     !SparseSet.member?(item_header, column_pointer)
   end
 
-  def uncover(
+  defp uncover(
         column_pointer,
         %{
           item_header: item_header,
@@ -363,13 +377,13 @@ defmodule InPlace.ExactCover do
     end)
   end
 
-  def increase_option_count(state, item_option_pointer) do
+  defp increase_option_count(state, item_option_pointer) do
     top = get_top(state, item_option_pointer)
     update_option_count(state, top, fn val -> val + 1 end)
   end
 
   ## 'update_fun/1' takes and updates current option count for given item header pointer
-  def update_option_count(state, item_header_pointer, update_fun)
+  defp update_option_count(state, item_header_pointer, update_fun)
       when is_function(update_fun, 1) do
     Array.update(state.item_option_counts.counts, item_header_pointer, update_fun)
   end
