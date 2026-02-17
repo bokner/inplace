@@ -302,12 +302,14 @@ defmodule InPlace.ExactCover do
           iterate_row(
             i,
             fn j ->
+              if i != j do
               ## Knuth:
               # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
               ##
               SparseSet.delete(item_lists, j)
               # and set S[C[j]]  ← S[C[j]]  − 1
               decrease_option_count(state, j)
+              end
             end,
             state
           )
@@ -456,9 +458,6 @@ defmodule InPlace.ExactCover do
         acc
       end
     end)
-    ## Note: the result is only used for undeletion of multiple options;
-    ## otherwise, the side effect of iterator_fun call would be all we need
-    ##
   end
 
 end
