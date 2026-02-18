@@ -353,12 +353,14 @@ defmodule InPlace.ExactCover do
         iterate_row(
           i,
           fn j ->
+            if i != j do
             ## Knuth:
             # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
             ##
             #SparseSet.undelete(item_lists)
             # and set S[C[j]]  ← S[C[j]]  − 1
             increase_option_count(state, j)
+            end
           end,
           state,
           false
