@@ -3,7 +3,7 @@ defmodule InPlace.ExactCover do
   Implementation of Exact Cover.
   Based on https://arxiv.org/pdf/cs/0011047 by Donald Knuth.
   Modified to use "dancing cells" instead of "dancing links"
-  for Dancing cells, see:
+  for Dancing cells, see
   YouTube: "Stanford Lecture: Dr. Don Knuth - Dancing Cells (2023)"
   """
   alias InPlace.{Array, SparseSet}
@@ -38,28 +38,31 @@ defmodule InPlace.ExactCover do
     ## Options are sets that contain item names.
     ## Build the state structures (roughly as described by D. Knuth)
     {_, item_map, entry_count, option_membership, option_ranges} =
-      Enum.reduce(options,
+      Enum.reduce(
+        options,
         {1, Map.new(), 0, [], Map.new()},
-          fn option,
-              {option_idx, directory, entry_idx, option_membership, option_ranges} = _acc ->
-        {directory, entry_count, membership} =
-          Enum.reduce(option, {directory, entry_idx, option_membership},
-            fn item_name,
-                {dir_acc, entry_idx_acc, membership_acc} ->
-            ## 1-based index, for convenience
-            entry_idx_acc = entry_idx_acc + 1
+        fn option, {option_idx, directory, entry_idx, option_membership, option_ranges} = _acc ->
+          {directory, entry_count, membership} =
+            Enum.reduce(option, {directory, entry_idx, option_membership}, fn item_name,
+                                                                              {dir_acc,
+                                                                               entry_idx_acc,
+                                                                               membership_acc} ->
+              ## 1-based index, for convenience
+              entry_idx_acc = entry_idx_acc + 1
 
-            {
-              Map.update(dir_acc, item_name, [entry_idx_acc], fn entries ->
-                [entry_idx_acc | entries]
-              end),
-              entry_idx_acc,
-              [option_idx | membership_acc]
-            }
-          end)
+              {
+                Map.update(dir_acc, item_name, [entry_idx_acc], fn entries ->
+                  [entry_idx_acc | entries]
+                end),
+                entry_idx_acc,
+                [option_idx | membership_acc]
+              }
+            end)
 
-        {option_idx + 1, directory, entry_count, membership, Map.put(option_ranges, option_idx, {entry_idx+1, entry_count})}
-      end)
+          {option_idx + 1, directory, entry_count, membership,
+           Map.put(option_ranges, option_idx, {entry_idx + 1, entry_count})}
+        end
+      )
 
     num_items = map_size(item_map)
     num_options = length(options)
@@ -72,37 +75,48 @@ defmodule InPlace.ExactCover do
     top = Array.new(entry_count, 0)
     option_counts = Array.new(num_items, 0)
 
-    {_, start_with, _} = Enum.reduce(item_lists, {1, nil, nil}, fn options, {item_idx, min_item, min_count} ->
-      Enum.each(options, fn o -> Array.put(top, o, item_idx) end)
-      num_options = length(options)
-      Array.put(option_counts, item_idx, num_options)
-      {min_item, min_count} = if num_options < min_count do
-        {item_idx, num_options}
-      else
-        {min_item, min_count}
-      end
-      {item_idx + 1, min_item, min_count}
-    end)
+    {_, start_with, _} =
+      Enum.reduce(item_lists, {1, nil, nil}, fn options, {item_idx, min_item, min_count} ->
+        Enum.each(options, fn o -> Array.put(top, o, item_idx) end)
+        num_options = length(options)
+        Array.put(option_counts, item_idx, num_options)
+
+        {min_item, min_count} =
+          if num_options < min_count do
+            {item_idx, num_options}
+          else
+            {min_item, min_count}
+          end
+
+        {item_idx + 1, min_item, min_count}
+      end)
 
     ## sparse-set for item lists
-    {_, item_options_map} = Enum.reduce(item_lists, {1, Map.new()}, fn options, {idx, acc} ->
-      {idx + 1, Map.put(acc, idx, options)}
-    end)
+    {_, item_options_map} =
+      Enum.reduce(item_lists, {1, Map.new()}, fn options, {idx, acc} ->
+        {idx + 1, Map.put(acc, idx, options)}
+      end)
 
     item_lists_ss = SparseSet.new(entry_count)
 
     %{
       num_items: num_items,
       num_options: num_options,
-      item_header: item_header, ## Sparse set for tracking covered items
+      ## Sparse set for tracking covered items
+      item_header: item_header,
       option_member_ids: init_option_member_ids(option_membership),
-      option_ranges: option_ranges, ## %{option_id => {first_entry_id, last_entry_id}
+      ## %{option_id => {first_entry_id, last_entry_id}
+      option_ranges: option_ranges,
       item_names: item_names,
-      top: top, ## top[i] points to the element of item header for i-th entry
-      item_lists: item_lists_ss, ## Sparse set for entries (contains entry ids)
-      item_options: item_options_map, ## %{item_id => options}
+      ## top[i] points to the element of item header for i-th entry
+      top: top,
+      ## Sparse set for entries (contains entry ids)
+      item_lists: item_lists_ss,
+      ## %{item_id => options}
+      item_options: item_options_map,
       item_option_counts: %{
-        counts: option_counts ## Count of active (uncovered) options per item
+        ## Count of active (uncovered) options per item
+        counts: option_counts
       },
       start_with: start_with,
       num_solutions: Array.new(1, 0),
@@ -179,12 +193,12 @@ defmodule InPlace.ExactCover do
       option_pointer,
       fn j ->
         if j != option_pointer do
-            ## Note: option pointer belongs to already covered item
-            ## , so we can skip on it
-            # Note2: cover/2 expects header (not item) pointer,
-            # so we need to convert
-            get_top(state, j)
-            |> cover(state)
+          ## Note: option pointer belongs to already covered item
+          ## , so we can skip on it
+          # Note2: cover/2 expects header (not item) pointer,
+          # so we need to convert
+          get_top(state, j)
+          |> cover(state)
         end
       end,
       state
@@ -195,9 +209,9 @@ defmodule InPlace.ExactCover do
     iterate_row(
       option_pointer,
       fn j ->
-        if  j != option_pointer do
-            get_top(state, j)
-            |> uncover(state)
+        if j != option_pointer do
+          get_top(state, j)
+          |> uncover(state)
         end
       end,
       state,
@@ -205,35 +219,40 @@ defmodule InPlace.ExactCover do
     )
   end
 
-
   def min_options_item(%{item_header: item_header} = state) do
-      ## Note: we will go through all uncovered items
-      ## and find the item with the smallest number of 'covered' options.
-      ## We will also be updating global 'minimum' with the second smallest item,
-      ## as the "minimum" item will be covered, so won't be in the item set.
-      ##
-      SparseSet.reduce(
-        item_header, {nil, nil},
-        fn p, {_min_p, min_acc} = acc ->
-          ## find min of option counts iterating over column (item) pointers
-          case get_item_options_count(state, p) do
-            0 -> {:halt, nil}
-            1 ->
-              {:halt, {p, 1}}
-            count ->
-              if count >= min_acc do
-                acc
-              else
-                {p, count}
-              end
-          end
+    ## Note: we will go through all uncovered items
+    ## and find the item with the smallest number of 'covered' options.
+    ## We will also be updating global 'minimum' with the second smallest item,
+    ## as the "minimum" item will be covered, so won't be in the item set.
+    ##
+    SparseSet.reduce(
+      item_header,
+      {nil, nil},
+      fn p, {_min_p, min_acc} = acc ->
+        ## find min of option counts iterating over column (item) pointers
+        case get_item_options_count(state, p) do
+          0 ->
+            {:halt, nil}
+
+          1 ->
+            {:halt, {p, 1}}
+
+          count ->
+            if count >= min_acc do
+              acc
+            else
+              {p, count}
+            end
         end
-      )
-      |> then(fn
-          nil -> nil
-          {min_item, _min_value} ->
-            min_item
-      end)
+      end
+    )
+    |> then(fn
+      nil ->
+        nil
+
+      {min_item, _min_value} ->
+        min_item
+    end)
   end
 
   defp get_item_options_count(state, item_pointer) do
@@ -257,8 +276,8 @@ defmodule InPlace.ExactCover do
         option_entry ->
           {:cont,
            [
-            ## solution_handler expects 0-based option index
-            (get_option_id(state, option_entry) - 1) | acc
+             ## solution_handler expects 0-based option index
+             get_option_id(state, option_entry) - 1 | acc
            ]}
       end
     end)
@@ -277,38 +296,26 @@ defmodule InPlace.ExactCover do
   ## associated with the item.
   ##
   defp cover(
-        column_pointer,
-        %{
-          item_header: item_header,
-          item_lists: item_lists,
-        } = state
-      )
-      when is_integer(column_pointer) and column_pointer > 0 do
-    ## Knuth:
-    # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
-    ##
+         column_pointer,
+         %{
+           item_header: item_header,
+           item_lists: item_lists
+         } = state
+       )
+       when is_integer(column_pointer) and column_pointer > 0 do
     if !covered?(column_pointer, state) do
       SparseSet.delete(item_header, column_pointer)
-      ## Knuth:
-      #  For each i ← D[c], D[D[c]] , . . . , while i != c,
-      ##
+
       iterate_column(
         column_pointer,
-        ## count of removed entries
-        ## Knuth:
-        # For each j ← R[i], R[R[i]] , . . . , while j != i,
-        ##
         fn i ->
           iterate_row(
             i,
             fn j ->
               if i != j do
-              ## Knuth:
-              # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
-              ##
-              SparseSet.delete(item_lists, j)
-              # and set S[C[j]]  ← S[C[j]]  − 1
-              decrease_option_count(state, j)
+                SparseSet.delete(item_lists, j)
+                # and set S[C[j]]  ← S[C[j]]  − 1
+                decrease_option_count(state, j)
               end
             end,
             state
@@ -328,47 +335,31 @@ defmodule InPlace.ExactCover do
   end
 
   defp uncover(
-        column_pointer,
-        %{
-          item_header: item_header,
-          item_lists: item_lists,
-        } = state
-      )
-      when is_integer(column_pointer) and column_pointer > 0 do
-    ## Knuth:
-    # Set L[R[c]]  ← L[c] and R[L[c]]  ← R[c].
-    ##
-
+         column_pointer,
+         %{
+           item_header: item_header,
+           item_lists: item_lists
+         } = state
+       )
+       when is_integer(column_pointer) and column_pointer > 0 do
     if SparseSet.undelete(item_header) do
-    ## Knuth:
-    #  For each i ← D[c], D[D[c]] , . . . , while i != c,
-    ##
-    iterate_column(
-      column_pointer,
-      ## count of removed entries
-      ## Knuth:
-      # For each j ← R[i], R[R[i]] , . . . , while j != i,
-      ##
-      fn i ->
-        iterate_row(
-          i,
-          fn j ->
-            if i != j do
-            ## Knuth:
-            # set U[D[j]]  ← U[j], D[U[j]]  ← D[j],
-            ##
-            #SparseSet.undelete(item_lists)
-            # and set S[C[j]]  ← S[C[j]]  − 1
-            increase_option_count(state, j)
-            end
-          end,
-          state,
-          false
-        )
-        |> tap(fn num_options -> SparseSet.undelete(item_lists, num_options) end)
-      end,
-      state
-    )
+      iterate_column(
+        column_pointer,
+        fn i ->
+          iterate_row(
+            i,
+            fn j ->
+              if i != j do
+                increase_option_count(state, j)
+              end
+            end,
+            state,
+            false
+          )
+          |> tap(fn num_options -> SparseSet.undelete(item_lists, num_options) end)
+        end,
+        state
+      )
     end
   end
 
@@ -377,7 +368,6 @@ defmodule InPlace.ExactCover do
 
     update_option_count(state, top, fn val ->
       val - 1
-
     end)
   end
 
@@ -388,7 +378,7 @@ defmodule InPlace.ExactCover do
 
   ## 'update_fun/1' takes and updates current option count for given item header pointer
   defp update_option_count(state, item_header_pointer, update_fun)
-      when is_function(update_fun, 1) do
+       when is_function(update_fun, 1) do
     Array.update(state.item_option_counts.counts, item_header_pointer, update_fun)
   end
 
@@ -402,15 +392,15 @@ defmodule InPlace.ExactCover do
 
     Enum.reduce(option_membership, l, fn idx, acc ->
       Array.put(arr, acc, idx)
-        acc - 1
-      end)
-      arr
+      acc - 1
+    end)
+
+    arr
   end
 
   defp get_option_id(%{option_member_ids: option_ids} = _state, option_entry) do
     Array.get(option_ids, option_entry)
   end
-
 
   defp get_top(%{top: top} = _state, el) do
     get_top(top, el)
@@ -424,10 +414,8 @@ defmodule InPlace.ExactCover do
   defp iterate_column(
          column_pointer,
          iterator_fun,
-         %{item_lists: item_lists,
-         item_options: item_options} = _state
+         %{item_lists: item_lists, item_options: item_options} = _state
        ) do
-
     columns_ss = Map.get(item_options, column_pointer)
 
     Enum.each(columns_ss, fn el ->
@@ -446,20 +434,21 @@ defmodule InPlace.ExactCover do
        ) do
     row_id = get_option_id(state, row_pointer)
     {first, last} = Map.get(ranges, row_id)
-    range = if forward? do
-      first..last
-    else
-      last..first//-1
-    end
+
+    range =
+      if forward? do
+        first..last
+      else
+        last..first//-1
+      end
 
     Enum.reduce(range, 0, fn p, acc ->
       if p != row_pointer do
-       iterator_fun.(p)
-       acc + 1
+        iterator_fun.(p)
+        acc + 1
       else
         acc
       end
     end)
   end
-
 end
