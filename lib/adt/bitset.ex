@@ -1,6 +1,6 @@
 defmodule InPlace.BitSet do
   @moduledoc """
-  BitSet is close in functionality to MapSet with integer values a s members.
+  BitSet is close in functionality to MapSet with integer values as members.
   The main difference is that BitSet has lower and upper bounds
   for set values that have to be defined at the time of creation (see new/2).
   """
@@ -70,9 +70,10 @@ defmodule InPlace.BitSet do
     end
   end
 
-  def member?(%{offset: offset} = set, element) when is_integer(element) do
-    offset_value = value_to_offset(offset, element)
-    member_impl(set, offset_value)
+  def member?(%{offset: offset, lower_bound: lb, upper_bound: ub} = set, element) when is_integer(element) do
+    element >= lb && element <= ub &&
+    (offset_value = value_to_offset(offset, element)
+    member_impl(set, offset_value))
   end
 
   defp member_impl(%{bit_vector: bit_vector} = _set, offset_value) do
