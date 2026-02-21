@@ -70,10 +70,13 @@ defmodule InPlace.BitSet do
     end
   end
 
-  def member?(%{offset: offset, lower_bound: lb, upper_bound: ub} = set, element) when is_integer(element) do
+  def member?(%{offset: offset, lower_bound: lb, upper_bound: ub} = set, element)
+      when is_integer(element) do
     element >= lb && element <= ub &&
-    (offset_value = value_to_offset(offset, element)
-    member_impl(set, offset_value))
+      (
+        offset_value = value_to_offset(offset, element)
+        member_impl(set, offset_value)
+      )
   end
 
   defp member_impl(%{bit_vector: bit_vector} = _set, offset_value) do
@@ -125,11 +128,13 @@ defmodule InPlace.BitSet do
     end
   end
 
-  defp last_block(%{offset: value_offset} = set) do
+  defp last_block(set) do
     case max(set) do
-      nil -> 0
+      nil ->
+        0
+
       max_value ->
-        value_address(max_value + value_offset)
+        value_address(set, max_value)
         |> elem(0)
     end
   end
@@ -140,33 +145,33 @@ defmodule InPlace.BitSet do
     :atomics.get(atomics, block_idx)
   end
 
-
   @doc """
   Find next position for {block_idx, block_offset}
   """
-  def next_position(set, {block_idx, block_offset} = _value_position) do
+  defp next_position(set, {block_idx, block_offset} = _value_position) do
     next_position(set, {block_idx, block_offset, nil})
   end
 
-  def next_position(set, {block_idx, block_offset, block_value} = _value_position) do
+  defp next_position(set, {block_idx, block_offset, block_value} = _value_position) do
     next_position(set, block_idx, block_offset, block_value)
   end
 
-  def next_position(set, block_idx, block_offset) do
+  defp next_position(set, block_idx, block_offset) do
     next_position(set, block_idx, block_offset, nil)
   end
 
-  def next_position(set, block_idx, block_offset, block_value) do
+  defp next_position(set, block_idx, block_offset, block_value) do
     if block_idx <= last_block(set) do
       next_position_impl(set, block_idx, block_offset, block_value)
     end
   end
 
   ## The beginning of a new block
-  def next_position_impl(set, block_idx, :lsb, _block_value) do
+  defp next_position_impl(set, block_idx, :lsb, _block_value) do
     case get_block(set, block_idx) do
       0 ->
         next_position(set, block_idx + 1, :lsb)
+
       block_value ->
         case lsb(block_value) do
           nil ->
@@ -178,12 +183,12 @@ defmodule InPlace.BitSet do
     end
   end
 
-  def next_position_impl(
-        set,
-        block_idx,
-        block_offset,
-        block_value
-      ) do
+  defp next_position_impl(
+         set,
+         block_idx,
+         block_offset,
+         block_value
+       ) do
     case block_value || get_block(set, block_idx) do
       0 ->
         ## nothing in this block, try next one.
@@ -212,8 +217,9 @@ defmodule InPlace.BitSet do
 
   ## Given the value, find block index (that is a position in bit vector)
   ## and an offset of the value relative to the beginning of the block
-  def value_address(value) do
-    {block_index(value), rem(value, 64)}
+  def value_address(set, value) do
+    value_with_offset = value + set.offset
+    {block_index(value_with_offset), rem(value_with_offset, 64)}
   end
 
   def to_list(set) do
@@ -261,16 +267,73 @@ defmodule InPlace.BitSet do
   end
 
   def intersection(set1, set2) do
-    lb = min(set1.lower_bound, set2.lower_bound)
-    ub = max(set1.upper_bound, set2.upper_bound)
-    {smaller, bigger} = (size(set1) < size(set2) && {set1, set2}) || {set2, set1}
+    lb = max(min(set1), min(set2)) || 0
+    ub = min(max(set1), max(set2)) || 0
 
-    new(lb, ub)
-    |> tap(fn intersection_set ->
-      iterate(smaller, nil, fn val, _ ->
-        member?(bigger, val) && put(intersection_set, val)
+    if lb > ub do
+      new(0, 0)
+    else
+      new(lb, ub)
+      |> tap(fn intersection_set ->
+        start_position =
+          case (member?(set1, lb) && lb) || next(set1, lb) do
+            nil ->
+              nil
+
+            start_position ->
+              value_address(set1, start_position)
+          end
+
+        iterate_impl(set1, nil, start_position, fn val, _ ->
+          if val > ub do
+            {:halt, false}
+          else
+            member?(set2, val) && put(intersection_set, val)
+          end
+        end)
       end)
+    end
+  end
+
+  def intersection2(set1, set2) do
+    min_value = max(set1.lower_bound, set2.lower_bound)
+    max_value = min(set1.upper_bound, set2.upper_bound)
+
+    new(min_value, max_value)
+    |> tap(fn intersection_set ->
+      if min_value > max_value do
+        ## Empty intersection
+        :ok
+      else
+        {lb_block, _} = value_address(set1, min_value)
+        {ub_block, _} = value_address(set1, max_value)
+        ## The relative position of set
+        position_shift = set1.lower_bound - set2.lower_bound
+        Enum.each(lb_block..ub_block, fn block_idx ->
+          case get_block(set1, block_idx) do
+            0 -> :ok
+            block_content ->
+              matching_content = get_matching_block(set2, block_idx)
+              update_block(intersection_set, block_idx, band(block_content, matching_content))
+          end
+        end)
+      end
     end)
+  end
+
+
+  def get_matching_block(set, block_idx) do
+    ## Given block id, calculate the value of the block
+    ## shifted to the right by the lower bound (or to the left by the offset)
+
+    ## Find the value represented by the position at the block start
+    value_at_block_start = (block_idx - 1) * 64
+    {block_position, _block_offset} =  value_address(set, value_at_block_start)
+    #TODO
+    #block_position
+  end
+
+  def update_block(set, block_idx, content) do
   end
 
   def union(set1, set2) do
@@ -295,10 +358,30 @@ defmodule InPlace.BitSet do
     new(lb, ub)
     |> tap(fn sym_diff_set ->
       iterate(set1, nil, fn val, _ -> put(sym_diff_set, val) end)
+
       iterate(set2, nil, fn val, _ ->
-        member?(sym_diff_set, val) && delete(sym_diff_set, val) || put(sym_diff_set, val)
+        (member?(sym_diff_set, val) && delete(sym_diff_set, val)) || put(sym_diff_set, val)
       end)
     end)
+  end
+
+  defp matching_block(set1, set2, block_idx) do
+    ## Find block in set2 that has the same value addresses as
+    ## block with `block_idx` index in set1
+    shift = set1.lower_bound - set2.lower_bound
+    block_shift = div(shift, 64)
+    matching_block = block_idx + block_shift
+
+    cond do
+      matching_block < 0 ->
+        nil
+
+      set2.last_index < matching_block ->
+        nil
+
+      true ->
+        matching_block
+    end
   end
 
   def min(set) do
@@ -326,10 +409,10 @@ defmodule InPlace.BitSet do
   end
 
   defp find_min(
-        %{offset: value_offset, last_index: last_idx} = set,
-        starting_value
-      ) do
-    {min_block_idx, _min_block_offset} = value_address(starting_value + value_offset)
+         %{last_index: last_idx} = set,
+         starting_value
+       ) do
+    {min_block_idx, _min_block_offset} = value_address(set, starting_value)
 
     _new_min_value =
       Enum.reduce_while(min_block_idx..last_idx, nil, fn block_idx, acc ->
@@ -369,8 +452,8 @@ defmodule InPlace.BitSet do
     :ok
   end
 
-  defp find_max(%{offset: value_offset} = set, starting_value) do
-    {max_block_idx, _max_block_offset} = value_address(starting_value + value_offset)
+  defp find_max(set, starting_value) do
+    {max_block_idx, _max_block_offset} = value_address(set, starting_value)
 
     _new_max_value =
       Enum.reduce_while(1..max_block_idx, nil, fn block_idx, acc ->
@@ -384,8 +467,8 @@ defmodule InPlace.BitSet do
       end)
   end
 
-  def next(%{offset: value_offset} = set, element) do
-    current_position = value_address(element + value_offset)
+  def next(set, element) do
+    current_position = value_address(set, element)
 
     case next_position(set, current_position) do
       nil ->
