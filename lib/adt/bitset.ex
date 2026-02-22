@@ -296,27 +296,43 @@ defmodule InPlace.BitSet do
   end
 
   def intersection2(set1, set2) do
-    min_value = max(set1.lower_bound, set2.lower_bound)
-    max_value = min(set1.upper_bound, set2.upper_bound)
+    intersection_lb = max(min(set1), min(set2)) || 0
+    intersection_ub = min(max(set1), max(set2)) || 0
 
-    new(min_value, max_value)
-    |> tap(fn intersection_set ->
-      if min_value > max_value do
-        ## Empty intersection
-        :ok
-      else
-        {lb_block, _} = value_address(set1, min_value)
-        {ub_block, _} = value_address(set1, max_value)
-        ## The relative position of set
-        position_shift = set1.lower_bound - set2.lower_bound
-        Enum.each(lb_block..ub_block, fn block_idx ->
-          case get_block(set1, block_idx) do
-            0 -> :ok
-            block_content ->
-              matching_content = get_matching_block(set2, block_idx)
-              update_block(intersection_set, block_idx, band(block_content, matching_content))
-          end
+    cond do
+      intersection_lb > intersection_ub ->
+        new(0, 0)
+      intersection_lb == intersection_ub ->
+        new(intersection_lb, intersection_lb)
+        |> put(intersection_lb)
+      true
+        new(intersection_lb, intersection_ub)
+        |> tap(fn intersection_set ->
+          build_intersection(intersection_set, set1, set2, intersection_lb, intersection_ub)
         end)
+    end
+  end
+
+  defp build_intersection(intersection_set, set1, set2, lb, ub) do
+    {lb_block, _} = value_address(set1, lb)
+    {ub_block, _} = value_address(set1, ub)
+    ## Choose the leading set.
+    ## By construction, the values in the bitset are represented by their positions
+    ## adjusted by an offset.
+    ## For instance, the value 5 in the set with lb = 3 is represented by third bit in the first block set to 1.
+    ## The leading set is the one with lesser lower bound.
+    ## Choosing leading set will make it easier to do a mapping of block values
+    ## between set1 and set2.
+    position_shift = set1.lower_bound - set2.lower_bound
+    leading_set = position_shift > 0 && set2 || set1
+    position_shift = abs(position_shift)
+    
+    Enum.each(lb_block..ub_block, fn block_idx ->
+      case get_block(set1, block_idx) do
+        0 -> :ok
+        block_content ->
+          matching_content = get_matching_block(set2, block_idx)
+          update_block(intersection_set, block_idx, band(block_content, matching_content))
       end
     end)
   end
