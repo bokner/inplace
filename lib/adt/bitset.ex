@@ -266,32 +266,36 @@ defmodule InPlace.BitSet do
     end
   end
 
+  def empty_set() do
+    new(0, 0)
+  end
+
   def intersection(set1, set2) do
-    lb = max(min(set1), min(set2)) || 0
-    ub = min(max(set1), max(set2)) || 0
-
-    if lb > ub do
-      new(0, 0)
+    if empty?(set1) || empty?(set2) do
+      empty_set()
     else
-      new(lb, ub)
-      |> tap(fn intersection_set ->
-        start_position =
-          case (member?(set1, lb) && lb) || next(set1, lb) do
-            nil ->
-              nil
+      min1 = min(set1)
+      min2 = min(set2)
+      {lb, set_with_lb, set2} =
+        min1 >= min2 && {min1, set1, set2}
+        || {min2, set2, set1}
+      ub = min(max(set1), max(set2))
 
-            start_position ->
-              value_address(set1, start_position)
-          end
+      if lb > ub do
+        empty_set()
+      else
+        new(lb, ub)
+        |> tap(fn intersection_set ->
 
-        iterate_impl(set1, nil, start_position, fn val, _ ->
-          if val > ub do
-            {:halt, false}
-          else
-            member?(set2, val) && put(intersection_set, val)
-          end
+        iterate(set_with_lb, nil, fn val, _ ->
+            if val > ub do
+              {:halt, false}
+            else
+              member?(set2, val) && put(intersection_set, val)
+            end
+          end)
         end)
-      end)
+      end
     end
   end
 
@@ -326,7 +330,7 @@ defmodule InPlace.BitSet do
     position_shift = set1.lower_bound - set2.lower_bound
     leading_set = position_shift > 0 && set2 || set1
     position_shift = abs(position_shift)
-    
+
     Enum.each(lb_block..ub_block, fn block_idx ->
       case get_block(set1, block_idx) do
         0 -> :ok
