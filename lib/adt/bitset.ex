@@ -17,7 +17,6 @@ defmodule InPlace.BitSet do
       lower_bound: lower_bound,
       upper_bound: upper_bound,
       bit_vector: bit_vector,
-      offset: -lower_bound,
       last_index: :atomics.info(atomics).size,
       size: Array.new(1, 0),
       minmax:
@@ -33,7 +32,6 @@ defmodule InPlace.BitSet do
         %{
           bit_vector: bit_vector,
           size: size,
-          offset: offset,
           lower_bound: lower_bound,
           upper_bound: upper_bound
         } = set,
@@ -44,7 +42,7 @@ defmodule InPlace.BitSet do
       throw(:value_out_of_bounds)
     end
 
-    position = value_to_offset(offset, element)
+    position = value_to_offset(lower_bound, element)
 
     if member_impl(set, position) do
       :ok
@@ -56,7 +54,7 @@ defmodule InPlace.BitSet do
     end
   end
 
-  def delete(%{offset: offset, bit_vector: bit_vector, size: size} = set, element)
+  def delete(%{lower_bound: offset, bit_vector: bit_vector, size: size} = set, element)
       when is_integer(element) do
     position = value_to_offset(offset, element)
 
@@ -70,11 +68,11 @@ defmodule InPlace.BitSet do
     end
   end
 
-  def member?(%{offset: offset, lower_bound: lb, upper_bound: ub} = set, element)
+  def member?(%{lower_bound: lb, upper_bound: ub} = set, element)
       when is_integer(element) do
     element >= lb && element <= ub &&
       (
-        offset_value = value_to_offset(offset, element)
+        offset_value = value_to_offset(lb, element)
         member_impl(set, offset_value)
       )
   end
@@ -84,11 +82,11 @@ defmodule InPlace.BitSet do
   end
 
   defp offset_to_value(offset, value) do
-    value - offset
+    value + offset
   end
 
   defp value_to_offset(offset, value) do
-    value + offset
+    value - offset
   end
 
   def iterate(set, acc, reducer) when is_function(reducer, 2) do
@@ -115,7 +113,7 @@ defmodule InPlace.BitSet do
     value_at_position(set, block_idx, block_offset)
   end
 
-  def value_at_position(%{offset: offset} = _set, block_idx, block_offset) do
+  def value_at_position(%{lower_bound: offset} = _set, block_idx, block_offset) do
     offset_to_value(
       offset,
       (block_idx - 1) * 64 + block_offset
@@ -218,7 +216,7 @@ defmodule InPlace.BitSet do
   ## Given the value, find block index (that is a position in bit vector)
   ## and an offset of the value relative to the beginning of the block
   def value_address(set, value) do
-    value_address(value + set.offset)
+    value_address(value - set.lower_bound)
   end
 
   def value_address(value) do
