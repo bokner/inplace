@@ -218,8 +218,11 @@ defmodule InPlace.BitSet do
   ## Given the value, find block index (that is a position in bit vector)
   ## and an offset of the value relative to the beginning of the block
   def value_address(set, value) do
-    value_with_offset = value + set.offset
-    {block_index(value_with_offset), rem(value_with_offset, 64)}
+    value_address(value + set.offset)
+  end
+
+  def value_address(value) do
+    {block_index(value), rem(value, 64)}
   end
 
   def to_list(set) do
@@ -288,11 +291,8 @@ defmodule InPlace.BitSet do
         |> tap(fn intersection_set ->
 
         iterate(set_with_lb, nil, fn val, _ ->
-            if val > ub do
-              {:halt, false}
-            else
-              member?(set2, val) && put(intersection_set, val)
-            end
+            val > ub && {:halt, false}
+            || member?(set2, val) && put(intersection_set, val)
           end)
         end)
       end
@@ -300,60 +300,55 @@ defmodule InPlace.BitSet do
   end
 
   def intersection2(set1, set2) do
-    intersection_lb = max(min(set1), min(set2)) || 0
-    intersection_ub = min(max(set1), max(set2)) || 0
+  if empty?(set1) || empty?(set2) do
+      empty_set()
+    else
+      min1 = min(set1)
+      min2 = min(set2)
+      {leading_set_min, leading_set, set2} =
+        min1 >= min2 && {min1, set1, set2}
+        || {min2, set2, set1}
+      intersection_ub = min(max(set1), max(set2))
 
-    cond do
-      intersection_lb > intersection_ub ->
-        new(0, 0)
-      intersection_lb == intersection_ub ->
-        new(intersection_lb, intersection_lb)
-        |> put(intersection_lb)
-      true
-        new(intersection_lb, intersection_ub)
+      if leading_set_min > intersection_ub do
+        empty_set()
+      else
+        new(leading_set_min, intersection_ub)
         |> tap(fn intersection_set ->
-          build_intersection(intersection_set, set1, set2, intersection_lb, intersection_ub)
+          build_intersection(intersection_set, leading_set, set2, leading_set_min, intersection_ub)
         end)
+      end
     end
   end
 
-  defp build_intersection(intersection_set, set1, set2, lb, ub) do
-    {lb_block, _} = value_address(set1, lb)
-    {ub_block, _} = value_address(set1, ub)
-    ## Choose the leading set.
-    ## By construction, the values in the bitset are represented by their positions
-    ## adjusted by an offset.
-    ## For instance, the value 5 in the set with lb = 3 is represented by third bit in the first block set to 1.
-    ## The leading set is the one with lesser lower bound.
-    ## Choosing leading set will make it easier to do a mapping of block values
-    ## between set1 and set2.
-    position_shift = set1.lower_bound - set2.lower_bound
-    leading_set = position_shift > 0 && set2 || set1
-    position_shift = abs(position_shift)
+  defp build_intersection(intersection_set, leading_set, trailing_set, leading_set_min, intersection_ub) do
+    ## We will iterate over blocks of leading set.
+    ## For every block, we will find corresponding (64-bit) value in the trailing set.
+    {first_block, _} = value_address(leading_set, leading_set_min)
+    {last_block, _} = value_address(leading_set, intersection_ub)
+    ## - How many blocks the leading and trailing sets are apart?
+    ## - What is the bit shift in the matching block of the trailing set
+    # relative to the beginning of block of leading set?
+    position_shift = leading_set.lower_bound - trailing_set.lower_bound
+    {block_shift, bit_shift} = {div(position_shift, 64), rem(position_shift, 64)}
 
-    Enum.each(lb_block..ub_block, fn block_idx ->
-      case get_block(set1, block_idx) do
+    Enum.each(first_block..last_block, fn block_idx ->
+      case get_block(leading_set, block_idx) do
         0 -> :ok
         block_content ->
-          matching_content = get_matching_block(set2, block_idx)
-          update_block(intersection_set, block_idx, band(block_content, matching_content))
+          matching_value = get_matching_value(trailing_set, block_idx, block_shift, bit_shift)
+          update_block(intersection_set, block_idx, band(block_content, matching_value))
       end
     end)
   end
 
 
-  def get_matching_block(set, block_idx) do
-    ## Given block id, calculate the value of the block
-    ## shifted to the right by the lower bound (or to the left by the offset)
-
-    ## Find the value represented by the position at the block start
-    value_at_block_start = (block_idx - 1) * 64
-    {block_position, _block_offset} =  value_address(set, value_at_block_start)
-    #TODO
-    #block_position
+  def get_matching_value(%{bit_vector: {:bit_vector, values}} = _set, block_idx, 0, _bit_shift) do
+    Array.get(values, block_idx)
   end
 
-  def update_block(set, block_idx, content) do
+  def update_block(%{bit_vector: {:bit_vector, values}} = _intersection_set, block_idx, content) do
+    Array.put(values, block_idx, content)
   end
 
   def union(set1, set2) do
