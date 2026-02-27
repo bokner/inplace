@@ -11,11 +11,12 @@ defmodule InPlace.BitSet do
   def new(lower_bound, upper_bound)
       when is_integer(lower_bound) and is_integer(upper_bound) and
              lower_bound <= upper_bound do
-    {:bit_vector, atomics} = bit_vector = :bit_vector.new(upper_bound - lower_bound + 1)
+    {:bit_vector, atomics} = bit_vector = :bit_vector.new(upper_bound - lower_bound + 64 * 2)
 
     %{
       lower_bound: lower_bound,
       upper_bound: upper_bound,
+      offset: compute_offset(lower_bound), ## to have lower bound value in the first block
       bit_vector: bit_vector,
       last_index: :atomics.info(atomics).size,
       size: Array.new(1, 0),
@@ -32,6 +33,7 @@ defmodule InPlace.BitSet do
         %{
           bit_vector: bit_vector,
           size: size,
+          offset: offset,
           lower_bound: lower_bound,
           upper_bound: upper_bound
         } = set,
@@ -42,7 +44,7 @@ defmodule InPlace.BitSet do
       throw(:value_out_of_bounds)
     end
 
-    position = value_to_offset(lower_bound, element)
+    position = value_to_offset(offset, element)
 
     if member_impl(set, position) do
       :ok
@@ -54,7 +56,7 @@ defmodule InPlace.BitSet do
     end
   end
 
-  def delete(%{lower_bound: offset, bit_vector: bit_vector, size: size} = set, element)
+  def delete(%{offset: offset, bit_vector: bit_vector, size: size} = set, element)
       when is_integer(element) do
     position = value_to_offset(offset, element)
 
@@ -68,11 +70,11 @@ defmodule InPlace.BitSet do
     end
   end
 
-  def member?(%{lower_bound: lb, upper_bound: ub} = set, element)
+  def member?(%{lower_bound: lb, offset: offset, upper_bound: ub} = set, element)
       when is_integer(element) do
     element >= lb && element <= ub &&
       (
-        offset_value = value_to_offset(lb, element)
+        offset_value = value_to_offset(offset, element)
         member_impl(set, offset_value)
       )
   end
@@ -81,11 +83,22 @@ defmodule InPlace.BitSet do
     :bit_vector.get(bit_vector, offset_value) == 1
   end
 
+  def compute_offset(lower_bound) do
+    ## align to the address of the block next to the lower bound value
+    positive = (div(lower_bound, 64)) * 64
+
+    if lower_bound < 0 do
+      -64 + positive
+    else
+      positive
+    end
+  end
+
   defp offset_to_value(offset, value) do
     value + offset
   end
 
-  defp value_to_offset(offset, value) do
+  def value_to_offset(offset, value) do
     value - offset
   end
 
@@ -113,7 +126,7 @@ defmodule InPlace.BitSet do
     value_at_position(set, block_idx, block_offset)
   end
 
-  def value_at_position(%{lower_bound: offset} = _set, block_idx, block_offset) do
+  def value_at_position(%{offset: offset} = _set, block_idx, block_offset) do
     offset_to_value(
       offset,
       (block_idx - 1) * 64 + block_offset
