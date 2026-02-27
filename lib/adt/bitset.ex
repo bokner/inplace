@@ -11,7 +11,7 @@ defmodule InPlace.BitSet do
   def new(lower_bound, upper_bound)
       when is_integer(lower_bound) and is_integer(upper_bound) and
              lower_bound <= upper_bound do
-    {:bit_vector, atomics} = bit_vector = :bit_vector.new(upper_bound - lower_bound + 64 * 2)
+    {:bit_vector, atomics} = bit_vector = :bit_vector.new(upper_bound - lower_bound + 64)
 
     %{
       lower_bound: lower_bound,
@@ -229,7 +229,7 @@ defmodule InPlace.BitSet do
   ## Given the value, find block index (that is a position in bit vector)
   ## and an offset of the value relative to the beginning of the block
   def value_address(set, value) do
-    value_address(value - set.lower_bound)
+    value_address(value - set.offset)
   end
 
   def value_address(value) do
