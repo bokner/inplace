@@ -337,17 +337,13 @@ defmodule InPlace.BitSet do
     ## For every block, we will find corresponding (64-bit) value in the trailing set.
     {first_block, _} = value_address(leading_set, leading_set_min)
     {last_block, _} = value_address(leading_set, intersection_ub)
-    ## - How many blocks the leading and trailing sets are apart?
-    ## - What is the bit shift in the matching block of the trailing set
-    # relative to the beginning of block of leading set?
-    position_shift = leading_set.lower_bound - trailing_set.lower_bound
-    {block_shift, bit_shift} = {div(position_shift, 64), rem(position_shift, 64)}
-
+    block_shift = div(leading_set.offset - trailing_set.offset, 64)
+    ## We intersect by blocks: block[leading_set, i] with block[trailing_set, i + block_shift]
     Enum.each(first_block..last_block, fn block_idx ->
       case get_block(leading_set, block_idx) do
         0 -> :ok
         block_content ->
-          matching_value = get_matching_value(trailing_set, block_idx, block_shift, bit_shift)
+          matching_value = get_block(trailing_set, block_idx + block_shift)
           update_block(intersection_set, block_idx, band(block_content, matching_value))
       end
     end)
@@ -389,25 +385,6 @@ defmodule InPlace.BitSet do
         (member?(sym_diff_set, val) && delete(sym_diff_set, val)) || put(sym_diff_set, val)
       end)
     end)
-  end
-
-  defp matching_block(set1, set2, block_idx) do
-    ## Find block in set2 that has the same value addresses as
-    ## block with `block_idx` index in set1
-    shift = set1.lower_bound - set2.lower_bound
-    block_shift = div(shift, 64)
-    matching_block = block_idx + block_shift
-
-    cond do
-      matching_block < 0 ->
-        nil
-
-      set2.last_index < matching_block ->
-        nil
-
-      true ->
-        matching_block
-    end
   end
 
   def min(set) do
