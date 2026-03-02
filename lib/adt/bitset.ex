@@ -11,13 +11,13 @@ defmodule InPlace.BitSet do
   def new(lower_bound, upper_bound)
       when is_integer(lower_bound) and is_integer(upper_bound) and
              lower_bound <= upper_bound do
-    {:bit_vector, atomics} = bit_vector = :bit_vector.new(upper_bound - lower_bound + 1)
+    {:bit_vector, atomics} = bit_vector = :bit_vector.new(upper_bound - lower_bound + 64)
 
     %{
       lower_bound: lower_bound,
       upper_bound: upper_bound,
+      offset: compute_offset(lower_bound), ## to have lower bound value in the first block
       bit_vector: bit_vector,
-      offset: -lower_bound,
       last_index: :atomics.info(atomics).size,
       size: Array.new(1, 0),
       minmax:
@@ -32,7 +32,6 @@ defmodule InPlace.BitSet do
   def put(
         %{
           bit_vector: bit_vector,
-          size: size,
           offset: offset,
           lower_bound: lower_bound,
           upper_bound: upper_bound
@@ -52,11 +51,11 @@ defmodule InPlace.BitSet do
       :bit_vector.set(bit_vector, position)
       update_min(set, element)
       update_max(set, element)
-      Array.update(size, 1, fn current_size -> current_size + 1 end)
+      increase_size(set, 1)
     end
   end
 
-  def delete(%{offset: offset, bit_vector: bit_vector, size: size} = set, element)
+  def delete(%{offset: offset, bit_vector: bit_vector} = set, element)
       when is_integer(element) do
     position = value_to_offset(offset, element)
 
@@ -66,11 +65,11 @@ defmodule InPlace.BitSet do
       :bit_vector.clear(bit_vector, position)
       maybe_tighten_min(set, element)
       maybe_tighten_max(set, element)
-      Array.update(size, 1, fn current_size -> current_size - 1 end)
+      decrease_size(set, 1)
     end
   end
 
-  def member?(%{offset: offset, lower_bound: lb, upper_bound: ub} = set, element)
+  def member?(%{lower_bound: lb, offset: offset, upper_bound: ub} = set, element)
       when is_integer(element) do
     element >= lb && element <= ub &&
       (
@@ -83,12 +82,23 @@ defmodule InPlace.BitSet do
     :bit_vector.get(bit_vector, offset_value) == 1
   end
 
-  defp offset_to_value(offset, value) do
-    value - offset
+  def compute_offset(lower_bound) do
+    ## align to the address of the block next to the lower bound value
+    positive = (div(lower_bound, 64)) * 64
+
+    if lower_bound < 0 do
+      -64 + positive
+    else
+      positive
+    end
   end
 
-  defp value_to_offset(offset, value) do
+  defp offset_to_value(offset, value) do
     value + offset
+  end
+
+  def value_to_offset(offset, value) do
+    value - offset
   end
 
   def iterate(set, acc, reducer) when is_function(reducer, 2) do
@@ -145,7 +155,7 @@ defmodule InPlace.BitSet do
     :atomics.get(atomics, block_idx)
   end
 
-  # Find next position for {block_idx, block_offset}
+  ## Find next position for {block_idx, block_offset}
   defp next_position(set, {block_idx, block_offset} = _value_position) do
     next_position(set, {block_idx, block_offset, nil})
   end
@@ -216,8 +226,11 @@ defmodule InPlace.BitSet do
   ## Given the value, find block index (that is a position in bit vector)
   ## and an offset of the value relative to the beginning of the block
   def value_address(set, value) do
-    value_with_offset = value + set.offset
-    {block_index(value_with_offset), rem(value_with_offset, 64)}
+    value_address(value - set.offset)
+  end
+
+  def value_address(value) do
+    {block_index(value), rem(value, 64)}
   end
 
   def to_list(set) do
@@ -269,6 +282,10 @@ defmodule InPlace.BitSet do
   end
 
   def intersection(set1, set2) do
+    intersection_v2(set1, set2)
+  end
+
+  def intersection_v1(set1, set2) do
     if empty?(set1) || empty?(set2) do
       empty_set()
     else
@@ -294,7 +311,85 @@ defmodule InPlace.BitSet do
     end
   end
 
+  def intersection_v2(set1, set2) do
+  if empty?(set1) || empty?(set2) do
+      empty_set()
+    else
+      min1 = min(set1)
+      min2 = min(set2)
+      {leading_set_min, leading_set, set2} =
+        min1 >= min2 && {min1, set1, set2}
+        || {min2, set2, set1}
+      intersection_ub = min(max(set1), max(set2))
+
+      if leading_set_min > intersection_ub do
+        empty_set()
+      else
+        new(leading_set_min, intersection_ub)
+        |> tap(fn intersection_set ->
+          build_intersection(intersection_set, leading_set, set2, leading_set_min, intersection_ub)
+        end)
+      end
+    end
+  end
+
+  defp build_intersection(%{bit_vector: {:bit_vector, bit_vector}} = intersection_set, leading_set, trailing_set, leading_set_min, intersection_ub) do
+    ## We will iterate over blocks of leading set.
+    ## For every block, we will find corresponding (64-bit) value in the trailing set.
+    {first_block, _} = value_address(leading_set, leading_set_min)
+    {last_block, _} = value_address(leading_set, intersection_ub)
+    block_shift = div(leading_set.offset - trailing_set.offset, 64)
+    ## We intersect by blocks: block[leading_set, i] with block[trailing_set, i + block_shift]
+    Enum.reduce(first_block..last_block, {1, 0, false}, fn block_idx, {block_count, set_size_count, min_value_set?} ->
+      block_content = get_block(leading_set, block_idx)
+      matching_value = get_block(trailing_set, block_idx + block_shift)
+      block_intersection = band(block_content, matching_value)
+      {
+        block_count + 1,
+        set_size_count + update_block(intersection_set, block_count, block_intersection, min_value_set?),
+        min_value_set? || block_intersection > 0
+      }
+    end)
+    |> then(fn {block_count, intersection_size, min_value_set?} ->
+      if min_value_set? do
+        block_count = block_count - 1
+        increase_size(intersection_set, intersection_size)
+
+        update_max(intersection_set, :atomics.get(bit_vector, block_count)
+        |> msb
+        |> Kernel.||(0)
+        |> Kernel.+(intersection_set.offset + (block_count - 1) * 64))
+      end
+    end)
+  end
+
+  def get_matching_value(%{bit_vector: {:bit_vector, values}} = _set, block_idx, 0, _bit_shift) do
+    Array.get(values, block_idx)
+  end
+
+  def update_block(%{bit_vector: {:bit_vector, bit_vector}} = intersection_set, block_idx, content, min_value_set?) do
+    Array.put(bit_vector, block_idx, content)
+
+    if content == 0 do
+      0
+    else
+      ## Set the minimum if not yet set
+      if !min_value_set? do
+        update_min(intersection_set,
+        content
+        |> lsb
+        |> Kernel.+(intersection_set.offset + (block_idx - 1) * 64))
+      end
+      bit_count(content)
+    end
+
+  end
+
   def union(set1, set2) do
+    union_v2(set1, set2)
+  end
+
+  def union_v1(set1, set2) do
     lb = min(set1.lower_bound, set2.lower_bound)
     ub = max(set1.upper_bound, set2.upper_bound)
 
@@ -305,21 +400,72 @@ defmodule InPlace.BitSet do
     end)
   end
 
+  def union_v2(set1, set2) do
+    union_impl(set1, set2, &bor/2)
+  end
+
+  defp union_impl(set1, set2, union_fun) do
+    if empty?(set1) && empty?(set2) do
+      empty_set()
+    else
+      min1 = min(set1)
+      min2 = min(set2)
+      ## leading set is the one with lesser of two minimums
+      {leading_set_min, leading_set, set2} =
+        min1 < min2 && {min1, set1, set2}
+        || {min2, set2, set1}
+      union_ub = max(max(set1), max(set2))
+
+      new(leading_set_min, union_ub)
+      |> tap(fn union_set ->
+        build_union(union_set, leading_set, set2, leading_set_min, union_ub, union_fun)
+      end)
+    end
+  end
+
+  defp build_union(%{bit_vector: {:bit_vector, bit_vector}} = union_set, leading_set, trailing_set, leading_set_min, union_max, union_fun) do
+    ## Get first and last block indices relative to the leading set
+    {first_block_union, _} = value_address(leading_set, leading_set_min)
+    {last_block_union, _} = value_address(leading_set, union_max)
+    {last_block_leading_set, _} = value_address(leading_set, max(leading_set))
+    {last_block_trailing_set, _} = value_address(trailing_set, max(trailing_set))
+
+    block_shift = div(leading_set.offset - trailing_set.offset, 64)
+    ## We union by blocks: block[leading_set, i] with block[trailing_set, i + block_shift]
+    Enum.reduce(first_block_union..last_block_union, {1, 0, false}, fn block_idx, {block_count, set_size_count, min_value_set?} ->
+      block_content = (block_idx <= last_block_leading_set && get_block(leading_set, block_idx) || 0)
+      matching_value = case block_idx + block_shift do
+        shifted_block_idx when shifted_block_idx > 0 and shifted_block_idx <= last_block_trailing_set ->
+          get_block(trailing_set, shifted_block_idx)
+          _ -> 0
+        end
+      block_union = union_fun.(block_content, matching_value)
+
+      {
+        block_count + 1,
+        set_size_count + update_block(union_set, block_count, block_union, min_value_set?),
+        min_value_set? || block_union > 0
+      }
+    end)
+      |> then(fn {block_count, union_size, min_value_set?} ->
+      if min_value_set? do
+        block_count = block_count - 1
+        increase_size(union_set, union_size)
+
+        update_max(union_set, :atomics.get(bit_vector, block_count)
+        |> msb
+        |> Kernel.||(0)
+        |> Kernel.+(union_set.offset + (block_count - 1) * 64))
+      end
+    end)
+  end
+
   def difference(set1, set2) do
     filter(set1, fn val -> !member?(set2, val) end)
   end
 
   def symmetric_difference(set1, set2) do
-    lb = min(set1.lower_bound, set2.lower_bound)
-    ub = max(set1.upper_bound, set2.upper_bound)
-
-    new(lb, ub)
-    |> tap(fn sym_diff_set ->
-      iterate(set1, nil, fn val, _ -> put(sym_diff_set, val) end)
-      iterate(set2, nil, fn val, _ ->
-        member?(sym_diff_set, val) && delete(sym_diff_set, val) || put(sym_diff_set, val)
-      end)
-    end)
+    union_impl(set1, set2, &bxor/2)
   end
 
   def min(set) do
@@ -403,6 +549,14 @@ defmodule InPlace.BitSet do
             {:halt, value_at_position(set, block_idx, msb(block_value))}
         end
       end)
+  end
+
+  defp increase_size(%{size: size} = _set, delta) do
+    Array.update(size, 1, fn current_size -> current_size + delta end)
+  end
+
+  defp decrease_size(set, delta) do
+    increase_size(set, -delta)
   end
 
   def next(set, element) do
