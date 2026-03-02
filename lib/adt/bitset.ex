@@ -401,6 +401,10 @@ defmodule InPlace.BitSet do
   end
 
   def union_v2(set1, set2) do
+    union_impl(set1, set2, &bor/2)
+  end
+
+  defp union_impl(set1, set2, union_fun) do
     if empty?(set1) && empty?(set2) do
       empty_set()
     else
@@ -414,13 +418,13 @@ defmodule InPlace.BitSet do
 
       new(leading_set_min, union_ub)
       |> tap(fn union_set ->
-        build_union(union_set, leading_set, set2, leading_set_min, union_ub)
+        build_union(union_set, leading_set, set2, leading_set_min, union_ub, union_fun)
       end)
     end
   end
 
-  defp build_union(%{bit_vector: {:bit_vector, bit_vector}} = union_set, leading_set, trailing_set, leading_set_min, union_max) do
-    ## Get first and last block indices relative to leading set
+  defp build_union(%{bit_vector: {:bit_vector, bit_vector}} = union_set, leading_set, trailing_set, leading_set_min, union_max, union_fun) do
+    ## Get first and last block indices relative to the leading set
     {first_block_union, _} = value_address(leading_set, leading_set_min)
     {last_block_union, _} = value_address(leading_set, union_max)
     {last_block_leading_set, _} = value_address(leading_set, max(leading_set))
@@ -435,7 +439,7 @@ defmodule InPlace.BitSet do
           get_block(trailing_set, shifted_block_idx)
           _ -> 0
         end
-      block_union = bor(block_content, matching_value)
+      block_union = union_fun.(block_content, matching_value)
 
       {
         block_count + 1,
@@ -461,17 +465,7 @@ defmodule InPlace.BitSet do
   end
 
   def symmetric_difference(set1, set2) do
-    lb = min(set1.lower_bound, set2.lower_bound)
-    ub = max(set1.upper_bound, set2.upper_bound)
-
-    new(lb, ub)
-    |> tap(fn sym_diff_set ->
-      iterate(set1, nil, fn val, _ -> put(sym_diff_set, val) end)
-
-      iterate(set2, nil, fn val, _ ->
-        (member?(sym_diff_set, val) && delete(sym_diff_set, val)) || put(sym_diff_set, val)
-      end)
-    end)
+    union_impl(set1, set2, &bxor/2)
   end
 
   def min(set) do
