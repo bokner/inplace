@@ -386,6 +386,10 @@ defmodule InPlace.BitSet do
   end
 
   def union(set1, set2) do
+    union_v2(set1, set2)
+  end
+
+  def union_v1(set1, set2) do
     lb = min(set1.lower_bound, set2.lower_bound)
     ub = max(set1.upper_bound, set2.upper_bound)
 
@@ -393,6 +397,62 @@ defmodule InPlace.BitSet do
     |> tap(fn union_set ->
       iterate(set1, nil, fn val, _ -> put(union_set, val) end)
       iterate(set2, nil, fn val, _ -> put(union_set, val) end)
+    end)
+  end
+
+  def union_v2(set1, set2) do
+    if empty?(set1) && empty?(set2) do
+      empty_set()
+    else
+      min1 = min(set1)
+      min2 = min(set2)
+      ## leading set is the one with lesser of two minimums
+      {leading_set_min, leading_set, set2} =
+        min1 < min2 && {min1, set1, set2}
+        || {min2, set2, set1}
+      union_ub = max(max(set1), max(set2))
+
+      new(leading_set_min, union_ub)
+      |> tap(fn union_set ->
+        build_union(union_set, leading_set, set2, leading_set_min, union_ub)
+      end)
+    end
+  end
+
+  defp build_union(%{bit_vector: {:bit_vector, bit_vector}} = union_set, leading_set, trailing_set, leading_set_min, union_max) do
+    ## Get first and last block indices relative to leading set
+    {first_block_union, _} = value_address(leading_set, leading_set_min)
+    {last_block_union, _} = value_address(leading_set, union_max)
+    {last_block_leading_set, _} = value_address(leading_set, max(leading_set))
+    {last_block_trailing_set, _} = value_address(trailing_set, max(trailing_set))
+
+    block_shift = div(leading_set.offset - trailing_set.offset, 64)
+    ## We union by blocks: block[leading_set, i] with block[trailing_set, i + block_shift]
+    Enum.reduce(first_block_union..last_block_union, {1, 0, false}, fn block_idx, {block_count, set_size_count, min_value_set?} ->
+      block_content = (block_idx <= last_block_leading_set && get_block(leading_set, block_idx) || 0)
+      matching_value = case block_idx + block_shift do
+        shifted_block_idx when shifted_block_idx > 0 and shifted_block_idx <= last_block_trailing_set ->
+          get_block(trailing_set, shifted_block_idx)
+          _ -> 0
+        end
+      block_union = bor(block_content, matching_value)
+
+      {
+        block_count + 1,
+        set_size_count + update_block(union_set, block_count, block_union, min_value_set?),
+        min_value_set? || block_union > 0
+      }
+    end)
+      |> then(fn {block_count, union_size, min_value_set?} ->
+      if min_value_set? do
+        block_count = block_count - 1
+        increase_size(union_set, union_size)
+
+        update_max(union_set, :atomics.get(bit_vector, block_count)
+        |> msb
+        |> Kernel.||(0)
+        |> Kernel.+(union_set.offset + (block_count - 1) * 64))
+      end
     end)
   end
 

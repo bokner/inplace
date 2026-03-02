@@ -97,35 +97,43 @@ defmodule InPlace.BitSetTest do
   end
 
   test "intersection" do
-    set1 = BitSet.new(-10, 10)
-    set2 = BitSet.new(-10, 10)
+    lb = -1000
+    ub = 1000
+    set1 = BitSet.new(lb, ub)
+    set2 = BitSet.new(lb, ub)
     intersection = BitSet.intersection(set1, set2)
     assert BitSet.empty?(intersection)
-    {even_values, odd_values} = Enum.split_with(-10..10, fn x  -> rem(x, 2) == 0 end)
+    {even_values, odd_values} = Enum.split_with(lb..ub, fn x  -> rem(x, 2) == 0 end)
     Enum.each(even_values, fn val -> BitSet.put(set1, val) end)
     Enum.each(odd_values, fn val -> BitSet.put(set2, val) end)
 
     intersection = BitSet.intersection(set1, set2)
     assert BitSet.empty?(intersection)
 
-    random_even = Enum.random(even_values)
-    random_odd = Enum.random(odd_values)
-    BitSet.put(set1, random_odd)
-    BitSet.put(set2, random_even)
+    ## Add some odd values to "even values" set,
+    ## and some even values to "odd values" set.
+    random_evens = Enum.take_random(even_values, 500)
+    random_odds = Enum.take_random(odd_values, 500)
+    Enum.each(random_odds, fn v -> BitSet.put(set1, v) end)
+    Enum.each(random_evens, fn v -> BitSet.put(set2, v) end)
+
     intersection = BitSet.intersection(set1, set2)
-    assert BitSet.to_list(intersection) == [random_even, random_odd] |> Enum.sort()
+    assert BitSet.to_list(intersection) == (random_evens ++ random_odds) |> Enum.sort()
   end
 
   test "union" do
-    set1 = BitSet.new(-10, 10)
-    set2 = BitSet.new(-10, 10)
+    lb = -1000
+    ub = 1000
+    set1 = BitSet.new(lb, ub)
+    set2 = BitSet.new(lb, ub)
+
     union = BitSet.union(set1, set2)
     assert BitSet.empty?(union)
-    {even_values, odd_values} = Enum.split_with(-10..10, fn x  -> rem(x, 2) == 0 end)
+    {even_values, odd_values} = Enum.split_with(lb..ub, fn x  -> rem(x, 2) == 0 end)
     Enum.each(even_values, fn val -> BitSet.put(set1, val) end)
     Enum.each(odd_values, fn val -> BitSet.put(set2, val) end)
     union = BitSet.union(set1, set2)
-    assert BitSet.to_list(union) == Enum.to_list(-10..10)
+    assert BitSet.to_list(union) == Enum.to_list(lb..ub)
   end
 
   test "difference" do
