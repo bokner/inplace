@@ -4,7 +4,7 @@ defmodule Inplace.MixProject do
   def project do
     [
       app: :inplace,
-      version: "0.6.8",
+      version: "0.7.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),

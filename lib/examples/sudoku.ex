@@ -106,11 +106,6 @@ defmodule InPlace.Examples.Sudoku do
     ]
   end
 
-  # defp maybe_add_option(row, d, covered_set) do
-  #   option = create_option(row, d)
-  #   Enum.any?(option, fn item -> BitSet.member?(covered_set, item) end) && false || option
-  # end
-
   defp cell_value(ascii_code) do
     ascii_code - 48
   end
