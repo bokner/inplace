@@ -29,6 +29,15 @@ defmodule InPlace.BitSet do
     }
   end
 
+  def new(list) do
+    lb = Enum.min(list)
+    ub = Enum.max(list)
+    new(lb, ub)
+    |> tap(fn set ->
+      Enum.each(list, fn val -> put(set, val) end)
+    end)
+  end
+
   def put(
         %{
           bit_vector: bit_vector,
@@ -405,9 +414,10 @@ defmodule InPlace.BitSet do
   end
 
   defp union_impl(set1, set2, union_fun) do
-    if empty?(set1) && empty?(set2) do
-      empty_set()
-    else
+    cond do
+      empty?(set1) -> set2
+      empty?(set2) -> set1
+      true ->
       min1 = min(set1)
       min2 = min(set2)
       ## leading set is the one with lesser of two minimums
