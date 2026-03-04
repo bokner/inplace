@@ -272,6 +272,10 @@ defmodule InPlace.BitSet do
   end
 
   def disjoint?(set1, set2) do
+    disjoint_v2?(set1, set2)
+  end
+
+  def disjoint_v1?(set1, set2) do
     size1 = size(set1)
     size2 = size(set2)
 
@@ -284,6 +288,42 @@ defmodule InPlace.BitSet do
         (member?(bigger, value) && {:halt, false}) || {:cont, true}
       end)
     end
+  end
+
+  def disjoint_v2?(set1, set2) do
+    empty?(set1) || empty?(set2) ||
+    (
+      min1 = min(set1)
+      min2 = min(set2)
+      {leading_set_min, leading_set, set2} =
+        min1 >= min2 && {min1, set1, set2}
+        || {min2, set2, set1}
+      intersection_ub = min(max(set1), max(set2))
+
+      if leading_set_min > intersection_ub do
+        true
+      else
+        disjoint_impl?(leading_set, set2, leading_set_min, intersection_ub)
+      end
+    )
+  end
+
+  defp disjoint_impl?(leading_set, trailing_set, leading_set_min, intersection_ub) do
+    {first_block, _} = value_address(leading_set, leading_set_min)
+    {last_block, _} = value_address(leading_set, intersection_ub)
+    block_shift = div(leading_set.offset - trailing_set.offset, 64)
+    ## We intersect by blocks: block[leading_set, i] with block[trailing_set, i + block_shift]
+    ## Once any of the block pairs intersect, we have an intersection, so return false.
+    Enum.reduce_while(first_block..last_block, true, fn block_idx, _disjoint_acc ->
+      block_content = get_block(leading_set, block_idx)
+      matching_value = get_block(trailing_set, block_idx + block_shift)
+      case band(block_content, matching_value) do
+        0 ->
+          {:cont, true}
+        _val ->
+          {:halt, false}
+      end
+    end)
   end
 
   def empty_set() do
@@ -321,7 +361,7 @@ defmodule InPlace.BitSet do
   end
 
   def intersection_v2(set1, set2) do
-  if empty?(set1) || empty?(set2) do
+    if empty?(set1) || empty?(set2) do
       empty_set()
     else
       min1 = min(set1)
