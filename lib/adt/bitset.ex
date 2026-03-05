@@ -158,10 +158,14 @@ defmodule InPlace.BitSet do
     end
   end
 
-  defp get_block(%{bit_vector: {:bit_vector, atomics}} = _set, block_idx) do
+  defp get_block(%{bit_vector: {:bit_vector, atomics}, last_index: last_idx} = _set, block_idx) do
     ## Note: we do not use Array.get/2 here because of possible mix-up
     ## between 0s and how Array differentiates between 0s and `nil`s
-    :atomics.get(atomics, block_idx)
+    if last_idx >= block_idx do
+      :atomics.get(atomics, block_idx)
+    else
+      0
+    end
   end
 
   ## Find next position for {block_idx, block_offset}
