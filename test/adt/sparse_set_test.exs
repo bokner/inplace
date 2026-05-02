@@ -12,12 +12,14 @@ defmodule InPlace.SparseSetTest do
 
     ## Deletion
     random_order = Enum.shuffle(1..domain_size)
+
     assert Enum.all?(random_order, fn el ->
-      size_before = SparseSet.size(set)
-      SparseSet.delete(set, el)
-      (size_before == SparseSet.size(set) + 1)
-      && assert_inverse(set)
-    end)
+             size_before = SparseSet.size(set)
+             SparseSet.delete(set, el)
+
+             size_before == SparseSet.size(set) + 1 &&
+               assert_inverse(set)
+           end)
 
     assert SparseSet.size(set) == 0
     assert SparseSet.empty?(set)
@@ -27,9 +29,11 @@ defmodule InPlace.SparseSetTest do
     Enum.all?(1..domain_size, fn _ ->
       size_before = SparseSet.size(set)
       SparseSet.undelete(set)
-      (size_before == SparseSet.size(set) - 1)
-      && assert_inverse(set)
+
+      size_before == SparseSet.size(set) - 1 &&
+        assert_inverse(set)
     end)
+
     assert SparseSet.size(set) == domain_size
     refute SparseSet.undelete(set)
   end
@@ -41,23 +45,33 @@ defmodule InPlace.SparseSetTest do
     assert SparseSet.get(set, random_el) == 2 * random_el
   end
 
+  test "copy" do
+    domain_size = 100
+    set = SparseSet.new(domain_size)
+    elements_to_delete = Enum.take_random(1..domain_size, div(domain_size, 2))
+    Enum.each(elements_to_delete, fn el -> SparseSet.delete(set, el) end)
+    set_copy = SparseSet.copy(set)
+    assert SparseSet.to_list(set) == SparseSet.to_list(set_copy)
+  end
+
   test "iteration (reduce)" do
     domain_size = 100
     set = SparseSet.new(domain_size)
     mapset = MapSet.new(1..domain_size)
     assert mapset == MapSet.new(SparseSet.to_list(set))
 
-    mapset_copy = SparseSet.reduce(set, MapSet.new, fn el, acc -> MapSet.put(acc, el) end)
+    mapset_copy = SparseSet.reduce(set, MapSet.new(), fn el, acc -> MapSet.put(acc, el) end)
     assert mapset == mapset_copy
 
     ## reduce with {:halt, _}
-    partial_set = SparseSet.reduce(set, MapSet.new(), fn el, acc ->
-      if el == div(domain_size, 2) do
-        {:halt, acc}
-      else
-        MapSet.put(acc, el)
-      end
-    end)
+    partial_set =
+      SparseSet.reduce(set, MapSet.new(), fn el, acc ->
+        if el == div(domain_size, 2) do
+          {:halt, acc}
+        else
+          MapSet.put(acc, el)
+        end
+      end)
 
     assert MapSet.size(partial_set) == div(domain_size, 2)
   end
@@ -71,13 +85,14 @@ defmodule InPlace.SparseSetTest do
     assert Array.to_list(arr) == List.duplicate(1, size)
   end
 
-  defp assert_inverse(%{dom: dom, idom: idom, dom_size: dom_size} = set) do
-    SparseSet.size(set) == 0 ||
-    Enum.all?(1..dom_size, fn idx ->
-      Array.get(idom,
-        Array.get(dom, idx)
-      ) == idx
-    end)
+  defp assert_inverse(%{dom: dom, idom: idom, max_size: dom_size} = set) do
+    assert (SparseSet.size(set) == 0 ||
+      Enum.all?(1..dom_size, fn idx ->
+        Array.get(
+          idom,
+          Array.get(dom, idx)
+        ) == idx
+      end)
+    )
   end
-
 end

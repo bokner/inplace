@@ -77,12 +77,16 @@ defmodule InPlace.Examples.Sudoku do
           {cell_number + 1,
           if hidden_cell?(cell) do
              Enum.reduce(0..(d - 1), options_acc, fn value, opt_acc ->
-              [create_option(cell_number * d + value, d) | opt_acc]
+              option = create_option(cell_number * d + value, d)
+              #BitSet.disjoint?(BitSet.new(option), covered_set) &&
+              [option | opt_acc]
+              #|| opt_acc
              end)
           else
             Enum.each(
               create_option(cell_number * d + cell_value(cell) - 1, d),
-              fn val -> BitSet.put(covered_set, val) end)
+              fn val -> BitSet.put(covered_set, val)
+            end)
             options_acc
           end
         }
