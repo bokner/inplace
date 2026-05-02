@@ -13,5 +13,7 @@ defmodule InPlace.ArrayTest do
     Array.put(array, 2, 101)
     Array.swap(array, 1, 2)
     assert Array.get(array, 1) == 101 && Array.get(array, 2) == 200
+    array_copy = Array.copy(array)
+    assert Array.to_list(array_copy) == Array.to_list(array)
   end
 end

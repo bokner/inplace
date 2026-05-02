@@ -15,7 +15,7 @@ defmodule InPlace.Array do
   def new(size, initial_value) do
     new(size, 0)
     |> tap(fn ref ->
-        Enum.each(1..size, fn idx -> put(ref, idx, initial_value) end)
+      Enum.each(1..size, fn idx -> put(ref, idx, initial_value) end)
     end)
   end
 
@@ -43,17 +43,25 @@ defmodule InPlace.Array do
     update_loop(array, idx, get(array, idx), update_fun)
   end
 
+  def copy(array) do
+    array_size = size(array)
+    arr_copy = new(array_size)
+    Enum.each(1..array_size, fn idx -> put(arr_copy, idx, get(array, idx)) end)
+    arr_copy
+  end
+
   defp update_loop(array, idx, current, update_fun) do
     updated_value = update_fun.(current)
-    if updated_value do
-    case :atomics.compare_exchange(array, idx, current, updated_value) do
-      :ok ->
-        updated_value
 
-      altered ->
-        update_loop(array, idx, altered, update_fun)
+    if updated_value do
+      case :atomics.compare_exchange(array, idx, current, updated_value) do
+        :ok ->
+          updated_value
+
+        altered ->
+          update_loop(array, idx, altered, update_fun)
+      end
     end
-  end
   end
 
   def swap(array, idx1, idx2) do
