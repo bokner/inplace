@@ -75,6 +75,16 @@ defmodule InPlace.Array do
     Enum.map(1..size(array), fn idx -> :atomics.get(array, idx) end)
   end
 
+  def from_list(list) do
+    arr = new(length(list))
+    Enum.reduce(list, 1, fn el, idx ->
+      put(arr, idx, el)
+      idx + 1
+    end)
+
+    arr
+  end
+
   def reduce(array, initial_value, reducer \\ fn el, acc -> [el | acc] end)
       when is_function(reducer) do
     Enum.reduce(1..size(array), initial_value, fn idx, acc ->

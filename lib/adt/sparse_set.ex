@@ -24,17 +24,20 @@ defmodule InPlace.SparseSet do
 
     dom = Array.new(domain_size)
     idom = Array.new(domain_size)
+
     Enum.each(1..domain_size, fn el ->
       Array.put(dom, el, el)
       Array.put(idom, el, el)
     end)
+
     size = Array.new(1)
     Array.put(size, 1, domain_size)
+
     %{
       dom: dom,
       idom: idom,
       mapper: Keyword.get(opts, :mapper),
-      dom_size: domain_size,
+      max_size: domain_size,
       size: size
     }
   end
@@ -70,17 +73,27 @@ defmodule InPlace.SparseSet do
     mapper_fun.(set, el)
   end
 
+  def copy(set) do
+    Map.take(set, [:max_size, :mapper])
+    |> Map.put(:size, Array.copy(set.size))
+    |> Map.put(:dom, Array.copy(set.dom))
+    |> Map.put(:idom, Array.copy(set.idom))
+  end
+
   defp member_impl(%{idom: idom} = set, el) do
     r = Array.get(idom, el)
+
     if r <= size(set) do
       r
     end
   end
 
-  defp inc_size(%{size: size, dom_size: dom_size} = _set, increase) when is_integer(increase) and increase > 0 do
+  defp inc_size(%{size: size, max_size: max_size} = _set, increase)
+       when is_integer(increase) and increase > 0 do
     Array.update(size, 1, fn s ->
       s = s + increase
-      if s <= dom_size do
+
+      if s <= max_size do
         s
       end
     end)
@@ -99,6 +112,7 @@ defmodule InPlace.SparseSet do
         Array.put(dom, s, el)
         Array.put(idom, el, s)
       end
+
       s - 1
     end)
   end
@@ -128,6 +142,7 @@ defmodule InPlace.SparseSet do
 
   defp iterate_impl(%{dom: dom} = set, acc, position, reducer) do
     el = Array.get(dom, position)
+
     case reducer.(el, acc) do
       {:halt, acc2} -> acc2
       {:cont, acc2} -> iterate_impl(set, acc2, position - 1, reducer)
@@ -138,6 +153,4 @@ defmodule InPlace.SparseSet do
   def to_list(set) do
     iterate(set, [], fn el, acc -> [el | acc] end)
   end
-
-
 end
