@@ -80,6 +80,20 @@ defmodule InPlace.SparseSet do
     |> Map.put(:idom, Array.copy(set.idom))
   end
 
+  def serialize(set) do
+    Map.take(set, [:max_size, :mapper])
+    |> Map.put(:size_as_list, Array.to_list(set.size))
+    |> Map.put(:dom_as_list, Array.to_list(set.dom))
+    |> Map.put(:idom_as_list, Array.to_list(set.idom))
+  end
+
+  def deserialize(serialized_set) do
+    Map.take(serialized_set, [:max_size, :mapper])
+    |> Map.put(:size, Array.from_list(serialized_set.size_as_list))
+    |> Map.put(:dom, Array.from_list(serialized_set.dom_as_list))
+    |> Map.put(:idom, Array.from_list(serialized_set.idom_as_list))
+  end
+
   defp member_impl(%{idom: idom} = set, el) do
     r = Array.get(idom, el)
 

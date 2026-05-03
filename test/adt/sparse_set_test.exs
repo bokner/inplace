@@ -85,6 +85,17 @@ defmodule InPlace.SparseSetTest do
     assert Array.to_list(arr) == List.duplicate(1, size)
   end
 
+  test "serialize/deserialize" do
+     domain_size = 100
+    set = SparseSet.new(domain_size)
+    elements_to_delete = Enum.take_random(1..domain_size, div(domain_size, 2))
+    Enum.each(elements_to_delete, fn el -> SparseSet.delete(set, el) end)
+    serialized = SparseSet.serialize(set)
+    set2 = SparseSet.deserialize(serialized)
+    assert SparseSet.to_list(set) == SparseSet.to_list(set2)
+    assert SparseSet.size(set) == SparseSet.size(set2)
+  end
+
   defp assert_inverse(%{dom: dom, idom: idom, max_size: dom_size} = set) do
     assert (SparseSet.size(set) == 0 ||
       Enum.all?(1..dom_size, fn idx ->
