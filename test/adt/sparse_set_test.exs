@@ -85,6 +85,33 @@ defmodule InPlace.SparseSetTest do
     assert Array.to_list(arr) == List.duplicate(1, size)
   end
 
+  test "ordered `map`" do
+    domain_size = 100
+    set = SparseSet.new(domain_size)
+    ## Delete some elements to shuffle the order
+    elements_to_delete = Enum.take_random(1..domain_size, div(domain_size, 2))
+    Enum.each(elements_to_delete, fn el -> SparseSet.delete(set, el) end)
+
+    assert set
+      |> SparseSet.reduce([], fn el, acc -> [2 * el | acc] end)
+      |> Enum.sort(:asc) ==
+      SparseSet.iterate_ordered(set, fn el -> 2 * el end)
+
+  end
+
+  test "ordered `reduce`" do
+    domain_size = 100
+    set = SparseSet.new(domain_size)
+    ## Delete some elements to shuffle the order
+    elements_to_delete = Enum.take_random(1..domain_size, div(domain_size, 2))
+    Enum.each(elements_to_delete, fn el -> SparseSet.delete(set, el) end)
+
+    assert set
+      |> SparseSet.to_list()
+      |> Enum.sort(:desc) ==
+      SparseSet.iterate_ordered(set, [], fn el, acc -> [el | acc] end)
+  end
+
   test "serialize/deserialize" do
      domain_size = 100
     set = SparseSet.new(domain_size)

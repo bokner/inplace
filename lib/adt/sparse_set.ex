@@ -137,8 +137,8 @@ defmodule InPlace.SparseSet do
     ]
   end
 
-  def reduce(set, acc, reducer) when is_function(reducer, 2) do
-    iterate(set, acc, reducer)
+  def reduce(set, initial, reducer) when is_function(reducer, 2) do
+    iterate(set, initial, reducer)
   end
 
   def each(set, action) when is_function(action, 1) do
@@ -146,12 +146,12 @@ defmodule InPlace.SparseSet do
     :ok
   end
 
-  def iterate(set, acc, reducer) when is_function(reducer, 2) do
-    iterate_impl(set, acc, size(set), reducer)
+  def iterate(set, initial, reducer) when is_function(reducer, 2) do
+    iterate_impl(set, initial, size(set), reducer)
   end
 
-  defp iterate_impl(_set, acc, 0, _reducer) do
-    acc
+  defp iterate_impl(_set, initial, 0, _reducer) do
+    initial
   end
 
   defp iterate_impl(%{dom: dom} = set, acc, position, reducer) do
@@ -164,7 +164,61 @@ defmodule InPlace.SparseSet do
     end
   end
 
+  @doc """
+  Iterate over set positions in increasing order (as opposed to iterating over set values).
+  This is equivalent to:
+  `iterate(set, initial, redicer)`
+  , but the above will process set elements in arbitrary order.
+  The intent is to not having to sort the result of the iteration.
+  This may or may not be more effective than the plain iteration.
+
+  """
+  def iterate_ordered(set, mapper) when is_function(mapper, 1) do
+    iterate_ordered(set, [], fn pos, acc -> [mapper.(pos) | acc ] end) |> Enum.reverse()
+  end
+
+  def iterate_ordered(set, initial, reducer) when is_function(reducer, 2) do
+    case size(set) do
+      0 ->
+        initial
+
+      set_size ->
+        Enum.reduce_while(1..set.max_size, {set_size, initial}, fn pos,
+                                                                   {count_remainder, result_acc} =
+                                                                     acc ->
+          if member?(set, pos) do
+            case apply_reduction(pos, result_acc, reducer) do
+              {:cont, result_acc} ->
+                ## Check if we've seen all set members
+                count_remainder = count_remainder - 1
+
+                if count_remainder == 0 do
+                  {:halt, {0, result_acc}}
+                else
+                  {:cont, {count_remainder, result_acc}}
+                end
+
+              {:halt, result_acc} ->
+                {:halt, {count_remainder, result_acc}}
+            end
+          else
+            ## Position is not a member of the set
+            {:cont, acc}
+          end
+        end)
+        |> elem(1)
+    end
+  end
+
   def to_list(set) do
     iterate(set, [], fn el, acc -> [el | acc] end)
+  end
+
+  defp apply_reduction(el, acc, reducer) do
+    case reducer.(el, acc) do
+      {:halt, acc2} -> {:halt, acc2}
+      {:cont, acc2} -> {:cont, acc2}
+      acc2 -> {:cont, acc2}
+    end
   end
 end
