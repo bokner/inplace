@@ -93,10 +93,9 @@ defmodule InPlace.SparseSetTest do
     Enum.each(elements_to_delete, fn el -> SparseSet.delete(set, el) end)
 
     assert set
-      |> SparseSet.reduce([], fn el, acc -> [2 * el | acc] end)
-      |> Enum.sort(:asc) ==
-      SparseSet.iterate_ordered(set, fn el -> 2 * el end)
-
+           |> SparseSet.reduce([], fn el, acc -> [2 * el | acc] end)
+           |> Enum.sort(:asc) ==
+             SparseSet.iterate_ordered(set, fn el -> 2 * el end)
   end
 
   test "ordered `reduce`" do
@@ -107,13 +106,38 @@ defmodule InPlace.SparseSetTest do
     Enum.each(elements_to_delete, fn el -> SparseSet.delete(set, el) end)
 
     assert set
-      |> SparseSet.to_list()
-      |> Enum.sort(:desc) ==
-      SparseSet.iterate_ordered(set, [], fn el, acc -> [el | acc] end)
+           |> SparseSet.to_list()
+           |> Enum.sort(:desc) ==
+             SparseSet.iterate_ordered(set, [], fn el, acc -> [el | acc] end)
+  end
+
+  test "iterations with removal" do
+    domain_size = 100
+    set1 = SparseSet.new(domain_size)
+    ## Delete some elements
+    elements_to_delete = Enum.take_random(1..domain_size, div(domain_size, 2)) |> MapSet.new()
+    Enum.each(elements_to_delete, fn el -> SparseSet.delete(set1, el) end)
+    ## For second set, delete elements and collect the ones remaining
+    set2 = SparseSet.new(domain_size)
+
+    SparseSet.iterate(set2, MapSet.new(), fn el, acc ->
+      if el in elements_to_delete do
+        SparseSet.delete(set2, el)
+        acc
+      else
+        MapSet.put(acc, el)
+      end
+    end)
+
+    ## set1 and set2 have the same elements
+    assert SparseSet.to_list(set1) |> Enum.sort() ==
+             SparseSet.to_list(set2) |> Enum.sort()
+
+    assert SparseSet.size(set2) == domain_size - MapSet.size(elements_to_delete)
   end
 
   test "serialize/deserialize" do
-     domain_size = 100
+    domain_size = 100
     set = SparseSet.new(domain_size)
     elements_to_delete = Enum.take_random(1..domain_size, div(domain_size, 2))
     Enum.each(elements_to_delete, fn el -> SparseSet.delete(set, el) end)
@@ -124,13 +148,12 @@ defmodule InPlace.SparseSetTest do
   end
 
   defp assert_inverse(%{dom: dom, idom: idom, max_size: dom_size} = set) do
-    assert (SparseSet.size(set) == 0 ||
-      Enum.all?(1..dom_size, fn idx ->
-        Array.get(
-          idom,
-          Array.get(dom, idx)
-        ) == idx
-      end)
-    )
+    assert SparseSet.size(set) == 0 ||
+             Enum.all?(1..dom_size, fn idx ->
+               Array.get(
+                 idom,
+                 Array.get(dom, idx)
+               ) == idx
+             end)
   end
 end
