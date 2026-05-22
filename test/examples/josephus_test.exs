@@ -3,7 +3,10 @@ defmodule InPlace.Examples.JosephusTest do
 
   alias InPlace.Examples.Josephus
 
-  test "the case with known answer (N = 41, k = 2)" do
-    assert 19 == Josephus.solve(41, 2)
+  test "the cases with known answers (N = 41, k = 2, 3)" do
+    ## Original story
+    assert 19 == Josephus.solve(41, 2) |> Map.get(:survivor)
+    ## Wikipedia example
+    assert 31 == Josephus.solve(41, 3) |> Map.get(:survivor)
   end
 end
