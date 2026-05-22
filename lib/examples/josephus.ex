@@ -13,21 +13,27 @@ defmodule InPlace.Examples.Josephus do
     circle = LinkedList.new(num_soldiers)
     Enum.each(1..num_soldiers, fn n -> LinkedList.append(circle, n) end)
 
-    _number_of_moves =
+    {_move_count, kill_sequence} =
       LinkedList.iterate(
         circle,
-        fn p, acc ->
-          if rem(acc, every_k) == 0 do
+        fn p, {count_acc, sequence_acc} ->
+          sequence_acc = if rem(count_acc, every_k) == 0 do
             LinkedList.delete_pointer(circle, p)
+            [p | sequence_acc]
+          else
+            sequence_acc
           end
 
-          acc + 1
+          {count_acc + 1, sequence_acc}
         end,
-        initial_value: 1,
+        initial_value: {1, []},
         stop_on: fn _ -> LinkedList.size(circle) == 1 end
       )
 
-    ## the survivor
-    LinkedList.data(circle, LinkedList.head(circle))
+    ## the survivor and kill sequence
+    %{
+      kill_sequence: Enum.reverse(kill_sequence),
+      survivor: LinkedList.data(circle, LinkedList.head(circle))
+    }
   end
 end
