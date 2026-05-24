@@ -3,7 +3,8 @@
 ```elixir
 Mix.install(
   [
-    :inplace,
+    #:inplace,
+    {:inplace, path: Path.join(System.get_env("HOME"), "projects/inplace")},
     :kino
   ]
 )
@@ -157,7 +158,7 @@ puzzles = File.read!(Path.join("/Users/bokner/projects/cpsolver", puzzle_file))
 
 res = Enum.map(Enum.with_index(puzzles, 1), fn {p, idx} -> 
   {tc, _} = 
-  :timer.tc(fn -> Sudoku.solve(p, checker: false,
+    :timer.tc(fn -> Sudoku.solve(p, checker: fn correct? -> !correct? && throw(:invalid) end,
     # choose_item_fun: fn _, data -> 
     #   InPlace.ExactCover.min_options_item(data)
     #end,

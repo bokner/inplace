@@ -1,0 +1,81 @@
+# Atomics
+
+```elixir
+Mix.install([
+  {:inplace, path: Path.join([System.get_env("HOME"), "projects", "inplace"])},
+  :kino,
+  {:kino_vega_lite, "~> 0.1.11"}
+])
+```
+
+## What is :atomics?
+
+Some description here
+
+## Create an array
+
+```elixir
+# Initialize
+array_size = 5
+array_ref = :atomics.new(5, [])
+list_values = fn(ref) ->
+  Enum.map(1..array_size, fn idx -> :atomics.get(ref, idx) end)
+end
+list_values.(array_ref)
+```
+
+## Modify in place
+
+```elixir
+## Modify in place
+Enum.each(1..array_size, fn idx -> 
+  value = rem(idx, 2) == 1 && 1 || -1
+  :atomics.put(array_ref, idx, value)
+  end)
+
+list_values.(array_ref)
+```
+
+## InPlace
+
+## BitSet
+
+```elixir
+Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "bitset.png"])
+|> File.read!()
+|> Kino.Image.new("image/jpeg")
+```
+
+## Linked lists
+
+## Josephus problem
+
+https://en.wikipedia.org/wiki/Josephus_problem
+
+Here is a story from Jewish historian Flavius Josephus.
+
+During the war between Roman and Jewish forces in the 1st century,
+Josephus and 40 soldiers ended up being trapped in a cave surrounded by Roman soldiers.
+They chose to die rather than surrender.
+
+All the soldiers would stand in a circle, and the first person would kill the second in the circle. Then, the next remaining living person (the third) would kill the next person (the fourth), and the next remaining living person after that (the fifth) would kill the next person (the sixth), and so on.
+
+Josephus managed to pick a position in the circle that allowed him to be a survivor.
+
+```elixir
+#Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "Josephus_problem_41_3.svg"])
+
+Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "josephus_animation.html"])
+|> File.read!()
+|> Kino.HTML.new()
+```
+
+[](https://en.wikipedia.org/wiki/Josephus_problem)
+
+```elixir
+InPlace.Examples.Josephus.solve(41, 3)
+```
+
+```elixir
+
+```

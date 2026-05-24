@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Josephus Problem Animation</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      min-height: 100vh;
+    }
+    h1 { margin-bottom: 5px; color: #00d9ff; }
+    .controls {
+      display: flex;
+      gap: 15px;
+      margin: 15px 0;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    input[type="number"] {
+      width: 60px;
+      padding: 6px;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #16213e;
+      color: #fff;
+    }
+    button {
+      padding: 8px 18px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.1s;
+    }
+    button:hover { transform: scale(1.05); }
+    #startBtn { background: #00d9ff; color: #1a1a2e; }
+    #resetBtn { background: #ff6b6b; color: #fff; }
+    .arena {
+      position: relative;
+      width: 420px;
+      height: 420px;
+      margin: 20px 0;
+    }
+    .person {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      transition: all 0.4s ease;
+      border: 3px solid transparent;
+    }
+    .person.alive { background: #4ecca3; color: #1a1a2e; }
+    .person.current { border-color: #ffe66d; box-shadow: 0 0 15px #ffe66d; }
+    .person.eliminated {
+      background: #393e46;
+      color: #666;
+      transform: scale(0.7);
+      opacity: 0.4;
+    }
+    .person.survivor {
+      background: #ffd700;
+      color: #1a1a2e;
+      box-shadow: 0 0 25px #ffd700;
+      animation: pulse 0.8s infinite alternate;
+    }
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.15); }
+    }
+    .status {
+      font-size: 18px;
+      min-height: 28px;
+      color: #ffe66d;
+    }
+    .info {
+      margin-top: 10px;
+      color: #888;
+      font-size: 14px;
+      text-align: center;
+      max-width: 400px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Josephus Problem</h1>
+  <div class="controls">
+    <label>People (n): <input type="number" id="nInput" value="10" min="2" max="30"></label>
+    <label>Skip (k): <input type="number" id="kInput" value="3" min="1" max="20"></label>
+    <label>Speed (ms): <input type="number" id="speedInput" value="600" min="100" max="2000" step="100"></label>
+    <button id="startBtn">Start</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+  <div class="status" id="status">Configure and press Start</div>
+  <div class="arena" id="arena"></div>
+  <div class="info">
+    Every <strong>k</strong>-th person is eliminated from a circle of <strong>n</strong> people.<br>
+    The last one standing survives!
+  </div>
+
+  <script>
+    const arena = document.getElementById('arena');
+    const status = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let people = [];
+    let running = false;
+    let timeoutId = null;
+
+    function createCircle(n) {
+      arena.innerHTML = '';
+      people = [];
+      const radius = 170;
+      const centerX = 210;
+      const centerY = 210;
+
+      for (let i = 0; i < n; i++) {
+        const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+        const x = centerX + radius * Math.cos(angle) - 22;
+        const y = centerY + radius * Math.sin(angle) - 22;
+
+        const div = document.createElement('div');
+        div.className = 'person alive';
+        div.textContent = i + 1;
+        div.style.left = x + 'px';
+        div.style.top = y + 'px';
+        arena.appendChild(div);
+
+        people.push({ el: div, alive: true, index: i });
+      }
+    }
+
+    async function runJosephus(n, k, speed) {
+      let alive = [...people];
+      let current = 0;
+
+      while (alive.length > 1) {
+        // Highlight counting
+        for (let count = 1; count <= k; count++) {
+          if (!running) return;
+          
+          alive.forEach(p => p.el.classList.remove('current'));
+          alive[current].el.classList.add('current');
+          status.textContent = `Counting ${count} of ${k}... (Person ${alive[current].index + 1})`;
+          
+          await sleep(speed);
+          
+          if (count < k) {
+            current = (current + 1) % alive.length;
+          }
+        }
+
+        // Eliminate
+        const eliminated = alive[current];
+        eliminated.el.classList.remove('current', 'alive');
+        eliminated.el.classList.add('eliminated');
+        eliminated.alive = false;
+        status.textContent = `Person ${eliminated.index + 1} eliminated!`;
+        
+        await sleep(speed);
+
+        alive.splice(current, 1);
+        if (alive.length > 0) {
+          current = current % alive.length;
+        }
+      }
+
+      if (alive.length === 1 && running) {
+        alive[0].el.classList.remove('current');
+        alive[0].el.classList.add('survivor');
+        status.textContent = `🎉 Person ${alive[0].index + 1} survives!`;
+      }
+      running = false;
+      startBtn.textContent = 'Start';
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => {
+        timeoutId = setTimeout(resolve, ms);
+      });
+    }
+
+    function reset() {
+      running = false;
+      if (timeoutId) clearTimeout(timeoutId);
+      const n = parseInt(document.getElementById('nInput').value) || 10;
+      createCircle(Math.min(Math.max(n, 2), n));
+      status.textContent = 'Configure and press Start';
+      startBtn.textContent = 'Start';
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (running) {
+        running = false;
+        startBtn.textContent = 'Start';
+        return;
+      }
+      
+      const n = parseInt(document.getElementById('nInput').value) || 10;
+      const k = parseInt(document.getElementById('kInput').value) || 3;
+      const speed = parseInt(document.getElementById('speedInput').value) || 600;
+      
+      reset();
+      running = true;
+      startBtn.textContent = 'Pause';
+      runJosephus(n, k, speed);
+    });
+
+    resetBtn.addEventListener('click', reset);
+
+    // Initialize
+    reset();
+  </script>
+</body>
+</html>
