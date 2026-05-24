@@ -49,8 +49,11 @@ defmodule InPlace.SparseSet do
     end
   end
 
+  
   def undelete(set) do
-    undelete(set, 1)
+    if undelete(set, 1) do
+      Array.get(set.dom, size(set))
+    end
   end
 
   def undelete(set, num) do

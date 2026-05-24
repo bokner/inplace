@@ -33,4 +33,10 @@ defmodule InPlace.Stack do
       Array.put(stack, new_size + 1, value)
     end
   end
+
+  def to_list(stack) do
+    Array.to_list(stack)
+    |> tl
+    |> Enum.take(size(stack))
+  end
 end

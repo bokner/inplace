@@ -2,6 +2,32 @@ defmodule InPlace.BitUtils do
   import Bitwise
 
   @all_ones_mask (1 <<< 64) - 1
+
+  ## Check if the bit at (0-based) position is set
+  def bit_set?(n, position) do
+    (n &&& 1 <<< position) != 0
+  end
+
+  ## Set/unset the bit at (0-based) position
+  ##
+  def set_bit(n, position) do
+    n ||| (1 <<< position)
+  end
+
+  def unset_bit(n, position) do
+    n &&& (Bitwise.bnot(1 <<< position))
+  end
+
+  ## Unfold into list
+  def to_list(0) do
+    []
+  end
+
+  def to_list(n) do
+    Enum.reduce(lsb(n)..msb(n), [], fn p, acc -> (bit_set?(n, p) && [p | acc]) || acc end)
+    |> Enum.reverse()
+  end
+
   ## Find least significant bit for given number
   def lsb(n, method \\ :debruijn)
 
@@ -47,7 +73,7 @@ defmodule InPlace.BitUtils do
       n = n ||| n >>> 16
       n = n ||| n >>> 32
 
-      normalized = (n * sequence) &&& @all_ones_mask
+      normalized = n * sequence &&& @all_ones_mask
 
       deBruijnTable(sequence, normalized >>> 58)
     end
