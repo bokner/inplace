@@ -1,0 +1,214 @@
+# Atomics (mutable variables)
+
+```elixir
+Mix.install([
+  {:inplace, path: Path.join([System.get_env("HOME"), "projects", "inplace"])},
+  :kino,
+  {:kino_vega_lite, "~> 0.1.11"}
+])
+
+defmodule AtomicsHelper do
+  def get_values(array_ref) do
+    array_size = :atomics.info(array_ref)[:size]  
+    Enum.map(1..array_size, fn idx -> :atomics.get(array_ref, idx) end)
+end
+end
+```
+
+## What is :atomics?
+
+The Erlang module that provides a set of functions to do atomic operations towards **mutable atomic variables** (will refer to them as `atomics`).
+
+* The atomics are organized into arrays
+
+* Atomics are **64 bit integers**.
+
+* Atomics can be represented as either signed or unsigned.
+
+* Atomics are lock-free, shared and leverage hardware-level atomic instructions.
+
+## Create an array of atomics
+
+```elixir
+import AtomicsHelper
+# Initialize
+array_size = 5
+array_ref = :atomics.new(5, [])
+
+## :atomics array values are initialized with 0
+get_values(array_ref)
+```
+
+## Modify array values in place
+
+```elixir
+## Modify in place
+## Use reference to the array to modify values
+Enum.each(1..array_size, fn idx -> 
+  value = if rem(idx, 2) == 1 do
+    1
+  else
+    -1
+  end
+  :atomics.put(array_ref, idx, value)
+  end)
+
+get_values(array_ref)
+```
+
+## Safe concurrency reads/writes
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+ @spec compare_exchange(ref, ix, expected, desired) :: :ok | integer()
+        when ref: atomics_ref(),
+             ix: pos_integer(),
+             expected: integer(),
+             desired: integer()
+
+since: OTP 21.2
+
+Atomically compare the atomic with Expected, and if those are equal, set atomic
+to Desired.
+
+Return ok if Desired was written. Return the actual atomic value if not equal
+to Expected.
+```
+
+## Example: synchronizing across multiple processes
+
+Use resource by one process at a time:
+
+```elixir
+defmodule SingletonResource do
+  @available 0
+  @taken 1
+
+  ## Tries to get a resource
+  ## If successfull, uses it, then releases.
+  ## Otherwise, repeats within a timeout
+  def acquire(resource_flag, process_id) do
+    ## try to get a resource
+    case :atomics.compare_exchange(resource_flag, 1, @available, @taken) do
+      :ok ->
+        IO.inspect("#{process_id}: :-)) got it!")
+        use_resource(process_id)
+        release(resource_flag)
+      @taken ->
+        IO.inspect("#{process_id}: didn't get it :-(( ... will try again shortly")
+        :timer.sleep(100)
+        acquire(resource_flag, process_id)
+    end
+  end
+
+  defp use_resource(process_id) do
+    IO.inspect("#{process_id}: working...")
+    :timer.sleep(Enum.random(100..200))
+    IO.inspect("#{process_id}: done...")
+  end
+
+  defp release(resource_flag) do
+    :atomics.put(resource_flag, 1, @available)
+  end
+end
+
+## We have two processes
+## , and we want only one process at a time to have an access to a specific resource.
+
+resource_flag = :atomics.new(1, [])
+
+Enum.each(
+  [:process1, :process2, :process3],
+  fn process_id ->
+    spawn(fn ->
+      :timer.sleep(Enum.random(100..200))
+      SingletonResource.acquire(resource_flag, process_id)
+    end)
+  end
+)
+```
+
+## InPlace library
+
+Github: bokner/inplace
+
+The wrapper around `atomics`, with some ADTs implemented
+
+* array
+* stack
+* queue
+* heap
+* priority queue
+* bitset
+* sparse set
+* linked lists
+
+## Circular linked lists
+
+```elixir
+File.read!("livebooks/circular-linked-list.svg.png")
+|> Kino.Image.new(:png)
+```
+
+## Josephus problem
+
+https://en.wikipedia.org/wiki/Josephus_problem
+
+Here is a story from Roman-Jewish historian Flavius Josephus (c. AD 37 – c. 100):
+
+During the war between Roman and Jewish forces in the 1st century,
+Josephus and 40 soldiers ended up being trapped in a cave surrounded by Roman soldiers.
+They chose to die rather than surrender.
+
+All the soldiers would stand in a circle, and the first person would kill the second in the circle. Then, the next remaining living person (the third) would kill the next person (the fourth), and the next remaining living person after that (the fifth) would kill the next person (the sixth), and so on.
+
+Josephus managed to pick a position in the circle that allowed him to be a survivor.
+
+```elixir
+#Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "Josephus_problem_41_3.svg"])
+
+Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "josephus_animation.html"])
+|> File.read!()
+|> Kino.HTML.new()
+```
+
+[](https://en.wikipedia.org/wiki/Josephus_problem)
+
+## Josephus problem: functional solution
+
+```elixir
+defmodule Josephus.Functional do
+  def permutation(list, k) when k > 0 do
+    do_permutation(list, k, [], 0)
+  end
+
+  defp do_permutation([], _k, acc, _idx), do: Enum.reverse(acc)
+
+  defp do_permutation(list, k, acc, idx) do
+    len = length(list)
+    kill_index = rem(idx + k - 1, len)
+
+    {picked, rest} = List.pop_at(list, kill_index)
+    do_permutation(rest, k, [picked | acc], kill_index)
+  end
+end
+
+
+```
+
+```elixir
+n = 10_000; k = 3
+:timer.tc(fn -> Josephus.Functional.permutation(1..n |> Enum.to_list(), k) end) |> elem(0) |> IO.inspect(label: :functional)
+:timer.tc(fn -> InPlace.Examples.Josephus.solve(n, k) end) |> elem(0) |> IO.inspect(label: :inplace)
+```
+
+```elixir
+
+```
+
+```elixir
+Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "bitset.png"])
+|> File.read!()
+|> Kino.Image.new("image/jpeg")
+```
