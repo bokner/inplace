@@ -1,4 +1,4 @@
-# Atomics
+# Atomics (mutable variables)
 
 ```elixir
 Mix.install([
@@ -6,53 +6,167 @@ Mix.install([
   :kino,
   {:kino_vega_lite, "~> 0.1.11"}
 ])
+
+defmodule AtomicsHelper do
+  def get_values(array_ref) do
+    array_size = :atomics.info(array_ref)[:size]  
+    Enum.map(1..array_size, fn idx -> :atomics.get(array_ref, idx) end)
+end
+end
 ```
 
 ## What is :atomics?
 
-Some description here
+The Erlang module that provides a set of functions to do atomic operations towards **mutable atomic variables** (will refer to them as `atomics`).
 
-## Create an array
+* The atomics are organized into arrays
+
+* Atomics are **64 bit integers**.
+
+* Atomics can be represented as either signed or unsigned.
+
+* Atomics are lock-free, shared and leverage hardware-level atomic instructions.
+
+## Create an array of atomics
 
 ```elixir
+import AtomicsHelper
 # Initialize
 array_size = 5
 array_ref = :atomics.new(5, [])
-list_values = fn(ref) ->
-  Enum.map(1..array_size, fn idx -> :atomics.get(ref, idx) end)
-end
-list_values.(array_ref)
+
+## :atomics array values are initialized with 0
+get_values(array_ref)
 ```
 
-## Modify in place
+## Modify array values in place
 
 ```elixir
 ## Modify in place
+## Use reference to the array to modify values
 Enum.each(1..array_size, fn idx -> 
-  value = rem(idx, 2) == 1 && 1 || -1
+  value = if rem(idx, 2) == 1 do
+    1
+  else
+    -1
+  end
   :atomics.put(array_ref, idx, value)
   end)
 
-list_values.(array_ref)
+get_values(array_ref)
 ```
 
-## InPlace
+## Safe concurrency reads/writes
 
-## BitSet
+<!-- livebook:{"force_markdown":true} -->
 
 ```elixir
-Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "bitset.png"])
-|> File.read!()
-|> Kino.Image.new("image/jpeg")
+ @spec compare_exchange(ref, ix, expected, desired) :: :ok | integer()
+        when ref: atomics_ref(),
+             ix: pos_integer(),
+             expected: integer(),
+             desired: integer()
+
+since: OTP 21.2
+
+Atomically compare the atomic with Expected, and if those are equal, set atomic
+to Desired.
+
+Return ok if Desired was written. Return the actual atomic value if not equal
+to Expected.
 ```
 
-## Linked lists
+## Example: synchronizing across multiple processes
+
+Use resource by one process at a time:
+
+```elixir
+defmodule SingletonResource do
+  @available 0
+  @taken 1
+
+  @colors %{
+    process1: IO.ANSI.red(),
+    process2: IO.ANSI.blue(),
+    process3: IO.ANSI.green()
+  }
+
+  ## Tries to get a resource
+  ## If successfull, uses it, then releases.
+  ## Otherwise, repeats within a timeout
+  def acquire(resource_flag, process_id) do
+    ## try to get a resource
+    case :atomics.compare_exchange(resource_flag, 1, @available, @taken) do
+      :ok ->
+        output(":-)) got it!", process_id)
+        use_resource(process_id)
+        release(resource_flag)
+      @taken ->
+        output("didn't get it :-(( ... will try again shortly", process_id)
+        :timer.sleep(100)
+        acquire(resource_flag, process_id)
+    end
+  end
+
+  defp use_resource(process_id) do
+    output("working...", process_id)
+    :timer.sleep(Enum.random(100..200))
+    output("done.", process_id)
+  end
+
+  defp release(resource_flag) do
+    :atomics.put(resource_flag, 1, @available)
+  end
+
+  defp output(string, process_id) do
+    color = Map.get(@colors, process_id)
+    IO.puts(color <> "#{process_id}: " <> string <> IO.ANSI.reset())
+  end
+end
+
+## We have two processes
+## , and we want only one process at a time to have an access to a specific resource.
+
+resource_flag = :atomics.new(1, [])
+
+Enum.each(
+  [:process1, :process2, :process3],
+  fn process_id ->
+    spawn(fn ->
+      :timer.sleep(Enum.random(100..200))
+      SingletonResource.acquire(resource_flag, process_id)
+    end)
+  end
+)
+```
+
+## InPlace library
+
+Github: bokner/inplace
+
+The wrapper around `atomics`, with some ADTs implemented
+
+* array
+* stack
+* queue
+* heap
+* priority queue
+* bitset
+* sparse set
+* linked lists
+
+## Circular linked lists
+
+```elixir
+File.read!("livebooks/circular-linked-list.svg.png")
+|> Kino.Image.new(:png)
+```
 
 ## Josephus problem
 
 https://en.wikipedia.org/wiki/Josephus_problem
 
-Here is a story from Jewish historian Flavius Josephus.
+Here is a story from Roman-Jewish historian Flavius Josephus (c. AD 37 – c. 100):
 
 During the war between Roman and Jewish forces in the 1st century,
 Josephus and 40 soldiers ended up being trapped in a cave surrounded by Roman soldiers.
@@ -72,10 +186,72 @@ Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "josephus
 
 [](https://en.wikipedia.org/wiki/Josephus_problem)
 
+## Josephus problem: functional solution
+
 ```elixir
-InPlace.Examples.Josephus.solve(41, 3)
+defmodule Josephus.Functional do
+  def solve(n, k) when k > 0 do
+    do_permutation(Enum.to_list(1..n), k, [], 0)
+  end
+
+  defp do_permutation([], _k, acc, _idx), do: Enum.reverse(acc)
+
+  defp do_permutation(list, k, acc, idx) do
+    len = length(list)
+    kill_index = rem(idx + k - 1, len)
+
+    {picked, rest} = List.pop_at(list, kill_index)
+    do_permutation(rest, k, [picked | acc], kill_index)
+  end
+end
+
+
 ```
 
-```elixir
+## Josephus problem with atomics (InPlace)
 
+```elixir
+defmodule Josephus.InPlace do
+  @moduledoc """
+  https://en.wikipedia.org/wiki/Josephus_problem
+  """
+  alias InPlace.LinkedList
+
+def solve(num_soldiers, every_k) do
+    circle = LinkedList.new(num_soldiers)
+    Enum.each(1..num_soldiers, fn n -> LinkedList.append(circle, n) end)
+
+    {_move_count, kill_sequence} =
+      LinkedList.iterate(
+        circle,
+        fn p, {count_acc, sequence_acc} ->
+          sequence_acc = if rem(count_acc, every_k) == 0 do
+            LinkedList.delete_pointer(circle, p)
+            [p | sequence_acc]
+          else
+            sequence_acc
+          end
+
+          {count_acc + 1, sequence_acc}
+        end,
+        initial_value: {1, []},
+        stop_on: fn _ -> LinkedList.size(circle) == 1 end
+      )
+
+    ## the survivor and kill sequence
+    %{
+      kill_sequence: Enum.reverse(kill_sequence),
+      survivor: LinkedList.data(circle, LinkedList.head(circle))
+    }
+  end
+end
+```
+
+## Josephus: Functional vs. Atomics performance
+
+```elixir
+n = 40_000; k = 3
+
+:timer.tc(fn -> Josephus.Functional.solve(n, k) end) |> elem(0) |> IO.inspect(label: :functional)
+:timer.tc(fn -> Josephus.InPlace.solve(n, k) end) |> elem(0) |> IO.inspect(label: :inplace)
 ```
