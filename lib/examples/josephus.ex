@@ -27,13 +27,9 @@ defmodule InPlace.Examples.Josephus do
           {count_acc + 1, sequence_acc}
         end,
         initial_value: {1, []},
-        stop_on: fn _ -> LinkedList.size(circle) == 1 end
+        stop_on: fn _ -> LinkedList.empty?(circle) end
       )
 
-    ## the survivor and kill sequence
-    %{
-      kill_sequence: Enum.reverse(kill_sequence),
-      survivor: LinkedList.data(circle, LinkedList.head(circle))
-    }
+      kill_sequence
   end
 end

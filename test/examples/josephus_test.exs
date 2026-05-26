@@ -5,8 +5,8 @@ defmodule InPlace.Examples.JosephusTest do
 
   test "the cases with known answers (N = 41, k = 2, 3)" do
     ## Original story
-    assert 19 == Josephus.solve(41, 2) |> Map.get(:survivor)
+    assert 19 == hd(Josephus.solve(41, 2))
     ## Wikipedia example
-    assert 31 == Josephus.solve(41, 3) |> Map.get(:survivor)
+    assert 31 == hd(Josephus.solve(41, 3))
   end
 end
