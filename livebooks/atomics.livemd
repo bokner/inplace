@@ -7,56 +7,48 @@ Mix.install([
   {:kino_vega_lite, "~> 0.1.11"}
 ])
 
-defmodule AtomicsHelper do
-  def get_values(array_ref) do
-    array_size = :atomics.info(array_ref)[:size]  
-    Enum.map(1..array_size, fn idx -> :atomics.get(array_ref, idx) end)
-end
-end
+require Logger
 ```
 
 ## What is :atomics?
 
 The Erlang module that provides a set of functions to do atomic operations towards **mutable atomic variables** (will refer to them as `atomics`).
 
-* The atomics are organized into arrays
-
-* Atomics are **64 bit integers**.
+* Atomics are **64-bit integers** organized into **arrays**.
 
 * Atomics can be represented as either signed or unsigned.
 
 * Atomics are lock-free, shared and leverage hardware-level atomic instructions.
 
-## Create an array of atomics
+* reads/writes are constant-time operations
+
+## Creating an array of atomics
 
 ```elixir
-import AtomicsHelper
-# Initialize
+# Initialize an atomic array
 array_size = 5
-array_ref = :atomics.new(5, [])
+array_ref = :atomics.new(array_size, [])
 
 ## :atomics array values are initialized with 0
-get_values(array_ref)
+Enum.map(1..array_size, fn idx -> :atomics.get(array_ref, idx) end)
 ```
 
-## Modify array values in place
+## Modifying array values in place
 
 ```elixir
 ## Modify in place
 ## Use reference to the array to modify values
-Enum.each(1..array_size, fn idx -> 
-  value = if rem(idx, 2) == 1 do
-    1
-  else
-    -1
-  end
+Enum.each(1..array_size, fn idx ->
+  value =
+    rem(idx, 2) == 1 && 1 || -1
+ 
   :atomics.put(array_ref, idx, value)
-  end)
+end)
 
-get_values(array_ref)
+Enum.map(1..array_size, fn idx -> :atomics.get(array_ref, idx) end)
 ```
 
-## Safe concurrency reads/writes
+## Safe concurrent reads/writes
 
 <!-- livebook:{"force_markdown":true} -->
 
@@ -78,7 +70,7 @@ to Expected.
 
 ## Example: synchronizing across multiple processes
 
-Use resource by one process at a time:
+#### Use a resource, one process at a time:
 
 ```elixir
 defmodule SingletonResource do
@@ -91,6 +83,8 @@ defmodule SingletonResource do
     process3: IO.ANSI.green()
   }
 
+  @resource_name "\u{1f699}"
+
   ## Tries to get a resource
   ## If successfull, uses it, then releases.
   ## Otherwise, repeats within a timeout
@@ -98,20 +92,21 @@ defmodule SingletonResource do
     ## try to get a resource
     case :atomics.compare_exchange(resource_flag, 1, @available, @taken) do
       :ok ->
-        output(":-)) got it!", process_id)
+        output("got #{@resource_name}!", process_id)
         use_resource(process_id)
         release(resource_flag)
+
       @taken ->
-        output("didn't get it :-(( ... will try again shortly", process_id)
+        output("#{@resource_name} is not there - will try later", process_id)
         :timer.sleep(100)
         acquire(resource_flag, process_id)
     end
   end
 
   defp use_resource(process_id) do
-    output("working...", process_id)
+    output("using #{@resource_name}...", process_id)
     :timer.sleep(Enum.random(100..200))
-    output("done.", process_id)
+    output("done, returned.", process_id)
   end
 
   defp release(resource_flag) do
@@ -119,14 +114,14 @@ defmodule SingletonResource do
   end
 
   defp output(string, process_id) do
-    color = Map.get(@colors, process_id)
-    IO.puts(color <> "#{process_id}: " <> string <> IO.ANSI.reset())
+    ansi_color = Map.get(@colors, process_id)
+    Logger.info([ansi_color, "#{process_id}: " <> string, IO.ANSI.reset()])
   end
 end
 
-## We have two processes
-## , and we want only one process at a time to have an access to a specific resource.
-
+## We have several processes competing for a single resource
+## 
+##
 resource_flag = :atomics.new(1, [])
 
 Enum.each(
@@ -153,7 +148,7 @@ The wrapper around `atomics`, with some ADTs implemented
 * priority queue
 * bitset
 * sparse set
-* linked lists
+* linked lists (singly-linked, doubly-linked, circular)
 
 ## Circular linked lists
 
@@ -169,7 +164,7 @@ https://en.wikipedia.org/wiki/Josephus_problem
 Here is a story from Roman-Jewish historian Flavius Josephus (c. AD 37 – c. 100):
 
 During the war between Roman and Jewish forces in the 1st century,
-Josephus and 40 soldiers ended up being trapped in a cave surrounded by Roman soldiers.
+Josephus along with 40 soldiers ended up being trapped in a cave surrounded by Roman soldiers.
 They chose to die rather than surrender.
 
 All the soldiers would stand in a circle, and the first person would kill the second in the circle. Then, the next remaining living person (the third) would kill the next person (the fourth), and the next remaining living person after that (the fifth) would kill the next person (the sixth), and so on.
@@ -177,8 +172,6 @@ All the soldiers would stand in a circle, and the first person would kill the se
 Josephus managed to pick a position in the circle that allowed him to be a survivor.
 
 ```elixir
-#Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "Josephus_problem_41_3.svg"])
-
 Path.join([System.get_env("HOME"), "projects", "inplace", "livebooks", "josephus_animation.html"])
 |> File.read!()
 |> Kino.HTML.new()
@@ -194,7 +187,7 @@ defmodule Josephus.Functional do
     do_permutation(Enum.to_list(1..n), k, [], 0)
   end
 
-  defp do_permutation([], _k, acc, _idx), do: Enum.reverse(acc)
+  defp do_permutation([], _k, acc, _idx), do: acc
 
   defp do_permutation(list, k, acc, idx) do
     len = length(list)
@@ -204,20 +197,15 @@ defmodule Josephus.Functional do
     do_permutation(rest, k, [picked | acc], kill_index)
   end
 end
-
-
 ```
 
 ## Josephus problem with atomics (InPlace)
 
 ```elixir
 defmodule Josephus.InPlace do
-  @moduledoc """
-  https://en.wikipedia.org/wiki/Josephus_problem
-  """
   alias InPlace.LinkedList
 
-def solve(num_soldiers, every_k) do
+  def solve(num_soldiers, every_k) do
     circle = LinkedList.new(num_soldiers)
     Enum.each(1..num_soldiers, fn n -> LinkedList.append(circle, n) end)
 
@@ -225,24 +213,21 @@ def solve(num_soldiers, every_k) do
       LinkedList.iterate(
         circle,
         fn p, {count_acc, sequence_acc} ->
-          sequence_acc = if rem(count_acc, every_k) == 0 do
-            LinkedList.delete_pointer(circle, p)
-            [p | sequence_acc]
-          else
-            sequence_acc
-          end
+          sequence_acc =
+            if rem(count_acc, every_k) == 0 do
+              LinkedList.delete_pointer(circle, p)
+              [p | sequence_acc]
+            else
+              sequence_acc
+            end
 
           {count_acc + 1, sequence_acc}
         end,
         initial_value: {1, []},
-        stop_on: fn _ -> LinkedList.size(circle) == 1 end
+        stop_on: fn _ -> LinkedList.empty?(circle) end
       )
-
-    ## the survivor and kill sequence
-    %{
-      kill_sequence: Enum.reverse(kill_sequence),
-      survivor: LinkedList.data(circle, LinkedList.head(circle))
-    }
+    
+    [_survivor | _killed] = kill_sequence
   end
 end
 ```
@@ -250,8 +235,15 @@ end
 ## Josephus: Functional vs. Atomics performance
 
 ```elixir
-n = 40_000; k = 3
+n = 100_000
+k = 3
 
-:timer.tc(fn -> Josephus.Functional.solve(n, k) end) |> elem(0) |> IO.inspect(label: :functional)
-:timer.tc(fn -> Josephus.InPlace.solve(n, k) end) |> elem(0) |> IO.inspect(label: :inplace)
+:timer.tc(fn -> Josephus.Functional.solve(n, k) 
+  |> hd() |> IO.inspect(label: :functional_survivor)  
+  end) |> elem(0) |> IO.inspect(label: :functional_time)
+
+# :timer.tc(fn -> Josephus.InPlace.solve(n, k) 
+#   |>  hd() |> IO.inspect(label: :inplace_survivor)  
+#   end) |> elem(0) |> IO.inspect(label: :inplace_time)
+# :ok
 ```
