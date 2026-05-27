@@ -2,7 +2,9 @@
 
 ```elixir
 Mix.install([
-  {:inplace, path: Path.join([System.get_env("HOME"), "projects", "inplace"])},
+  {:inplace, github: "bokner/inplace", branch: "atomics_presentation"
+    #path: Path.join([System.get_env("HOME"), "projects", "inplace"])
+    },
   :kino,
   {:kino_vega_lite, "~> 0.1.11"}
 ])
@@ -235,15 +237,15 @@ end
 ## Josephus: Functional vs. Atomics performance
 
 ```elixir
-n = 100_000
+n = 10_000
 k = 3
 
 :timer.tc(fn -> Josephus.Functional.solve(n, k) 
-  |> hd() |> IO.inspect(label: :functional_survivor)  
+  |> hd() |> IO.inspect(label: :functional_survivor_answer)  
   end) |> elem(0) |> IO.inspect(label: :functional_time)
 
-# :timer.tc(fn -> Josephus.InPlace.solve(n, k) 
-#   |>  hd() |> IO.inspect(label: :inplace_survivor)  
-#   end) |> elem(0) |> IO.inspect(label: :inplace_time)
-# :ok
+:timer.tc(fn -> Josephus.InPlace.solve(n, k) 
+  |>  hd() |> IO.inspect(label: :inplace_survivor_answer)  
+  end) |> elem(0) |> IO.inspect(label: :inplace_time)
+:ok
 ```
