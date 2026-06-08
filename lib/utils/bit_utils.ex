@@ -3,18 +3,20 @@ defmodule InPlace.BitUtils do
 
   @all_ones_mask (1 <<< 64) - 1
 
+  defguard is_64_bit(value) when value <= @all_ones_mask
+
   ## Check if the bit at (0-based) position is set
-  def bit_set?(n, position) do
+  def bit_set?(n, position) when is_64_bit(n) do
     (n &&& 1 <<< position) != 0
   end
 
   ## Set/unset the bit at (0-based) position
   ##
-  def set_bit(n, position) do
+  def set_bit(n, position) when is_64_bit(n) do
     n ||| (1 <<< position)
   end
 
-  def unset_bit(n, position) do
+  def unset_bit(n, position) when is_64_bit(n) do
     n &&& (Bitwise.bnot(1 <<< position))
   end
 
@@ -23,7 +25,7 @@ defmodule InPlace.BitUtils do
     []
   end
 
-  def to_list(n) do
+  def to_list(n) when is_64_bit(n) do
     Enum.reduce(lsb(n)..msb(n), [], fn p, acc -> (bit_set?(n, p) && [p | acc]) || acc end)
     |> Enum.reverse()
   end
@@ -35,11 +37,11 @@ defmodule InPlace.BitUtils do
     nil
   end
 
-  def lsb(n, :shift) do
+  def lsb(n, :shift) when is_64_bit(n) do
     lsb_impl(n, 0)
   end
 
-  def lsb(n, :debruijn) do
+  def lsb(n, :debruijn) when is_64_bit(n) do
     sequence = 0x022FDD63CC95386D
     ## Complement, multiply and normalize to 64-bit
     normalized = (n &&& -n) * sequence &&& @all_ones_mask
@@ -62,7 +64,7 @@ defmodule InPlace.BitUtils do
 
   def msb(0, _method), do: nil
 
-  def msb(n, :debruijn) do
+  def msb(n, :debruijn) when is_64_bit(n) do
     sequence = 0x03F79D71B4CB0A89
 
     if n > 0 do
@@ -79,7 +81,7 @@ defmodule InPlace.BitUtils do
     end
   end
 
-  def msb(n, :log2) do
+  def msb(n, :log2) when is_64_bit(n) do
     if n > 0 do
       n = n ||| n >>> 1
       n = n ||| n >>> 2
@@ -96,7 +98,7 @@ defmodule InPlace.BitUtils do
     0
   end
 
-  def bit_count(n) do
+  def bit_count(n) when is_64_bit(n) do
     n = (n &&& 0x5555555555555555) + (n >>> 1 &&& 0x5555555555555555)
     n = (n &&& 0x3333333333333333) + (n >>> 2 &&& 0x3333333333333333)
     n = (n &&& 0x0F0F0F0F0F0F0F0F) + (n >>> 4 &&& 0x0F0F0F0F0F0F0F0F)
