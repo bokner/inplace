@@ -7,11 +7,12 @@ defmodule InPlace.BitSet do
   alias InPlace.Array
   import Bitwise
   import InPlace.BitUtils
+  alias InPlace.Utils.BitVector
 
   def new(lower_bound, upper_bound)
       when is_integer(lower_bound) and is_integer(upper_bound) and
              lower_bound <= upper_bound do
-    {:bit_vector, atomics} = bit_vector = :bit_vector.new(upper_bound - lower_bound + 64)
+    {:bit_vector, atomics} = bit_vector = BitVector.new(upper_bound - lower_bound + 64)
 
     %{
       lower_bound: lower_bound,
@@ -57,7 +58,7 @@ defmodule InPlace.BitSet do
     if member_impl(set, position) do
       :ok
     else
-      :bit_vector.set(bit_vector, position)
+      BitVector.set(bit_vector, position)
       update_min(set, element)
       update_max(set, element)
       increase_size(set, 1)
@@ -71,7 +72,7 @@ defmodule InPlace.BitSet do
     if !member_impl(set, position) do
       :ok
     else
-      :bit_vector.clear(bit_vector, position)
+      BitVector.clear(bit_vector, position)
       maybe_tighten_min(set, element)
       maybe_tighten_max(set, element)
       decrease_size(set, 1)
@@ -88,7 +89,7 @@ defmodule InPlace.BitSet do
   end
 
   defp member_impl(%{bit_vector: bit_vector} = _set, offset_value) do
-    :bit_vector.get(bit_vector, offset_value) == 1
+    BitVector.get(bit_vector, offset_value) == 1
   end
 
   def compute_offset(lower_bound) do
