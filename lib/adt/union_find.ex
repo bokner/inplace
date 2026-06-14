@@ -1,7 +1,10 @@
 defmodule InPlace.UnionFind do
-  @doc """
-    union-find operations on fixed-length set.
-    The set is represented by the set of integer indices.
+  @moduledoc """
+  Union-find (a.k.a. DSU)
+
+  https://en.wikipedia.org/wiki/Disjoint-set_data_structure
+
+  The (fixed-length) set is represented by the set of integer indices.
   """
   alias InPlace.Array
 
