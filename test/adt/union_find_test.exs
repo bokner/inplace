@@ -1,7 +1,7 @@
 defmodule InPlace.UnionFindTest do
   use ExUnit.Case
 
-  alias InPlace.{UnionFind, Array}
+  alias InPlace.UnionFind
 
   test "operations" do
     uf_size = 10
@@ -15,19 +15,40 @@ defmodule InPlace.UnionFindTest do
     UnionFind.union(uf, 1, 3)
     UnionFind.union(uf, 2, 4)
     set_of_4 = [1, 2, 3, 4]
+    the_rest = Enum.to_list(1..uf_size) -- set_of_4
+
 
     assert Enum.all?(set_of_4, fn el -> UnionFind.set_size(uf, el) == 4 end)
     ## Unite elements that are already in a subset does not change anything
     UnionFind.union(uf, 1, 4)
     assert Enum.all?(set_of_4, fn el -> UnionFind.set_size(uf, el) == 4 end)
 
-    assert Enum.all?(Enum.to_list(1..uf_size) -- set_of_4, fn el ->
+    assert Enum.all?(the_rest, fn el ->
       UnionFind.set_size(uf, el) == 1
     end)
 
-    num_sets = Array.to_list(uf.parent) |> Enum.frequencies()
     ## One subset has 4 members, others have a single element each
-    assert map_size(num_sets) == uf_size - 4 + 1
+    assert count_sets(uf) == uf_size - 4 + 1
+
+    ## Unite everything outside set of 4
+    Enum.each(tl(the_rest), fn el ->
+      UnionFind.union(uf, el, hd(the_rest))
+    end)
+
+    ## Should have two sets (set of 4 and the rest)
+    assert 2 = count_sets(uf)
+
+    ## Union those two
+    UnionFind.union(uf, Enum.random(set_of_4), Enum.random(the_rest))
+
+    assert 1 = count_sets(uf)
+
   end
 
+  defp count_sets(uf) do
+    Enum.reduce(1..uf.size, MapSet.new(), fn el, acc ->
+      MapSet.put(acc, UnionFind.find(uf, el))
+    end)
+    |> MapSet.size()
+  end
 end
