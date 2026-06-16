@@ -30,7 +30,7 @@ defmodule InPlace.UnionFindTest do
     ## One subset has 4 members, others have a single element each
     assert count_sets(uf) == uf_size - 4 + 1
 
-    ## Unite everything outside set of 4
+    ## Unify everything outside of 'set of 4'
     Enum.each(tl(the_rest), fn el ->
       UnionFind.union(uf, el, hd(the_rest))
     end)
@@ -38,10 +38,12 @@ defmodule InPlace.UnionFindTest do
     ## Should have two sets (set of 4 and the rest)
     assert 2 = count_sets(uf)
 
-    ## Union those two
+    ## Unify into a single set
     UnionFind.union(uf, Enum.random(set_of_4), Enum.random(the_rest))
 
     assert 1 = count_sets(uf)
+
+    assert Enum.all?(1..uf_size, fn el -> UnionFind.set_size(uf, el) == uf_size end)
 
   end
 
