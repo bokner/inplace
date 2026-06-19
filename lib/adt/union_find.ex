@@ -32,8 +32,12 @@ defmodule InPlace.UnionFind do
     end
   end
 
-  def union(%{parent: parent, set_size: set_size} = uf, a, b)
-      when is_integer(a) and is_integer(b) and a > 0 and b > 0 do
+  def find(_uf, _v) do
+    nil
+  end
+
+  def union(%{parent: parent, set_size: set_size, size: size} = uf, a, b)
+      when is_integer(a) and is_integer(b) and a <= size and a > 0 and b <= size and b > 0 do
     a = find(uf, a)
     b = find(uf, b)
 
@@ -51,6 +55,10 @@ defmodule InPlace.UnionFind do
       Array.put(parent, b, a)
       Array.put(set_size, a, size_a + size_b)
     end
+  end
+
+  def union(_uf, a, b) do
+    {:error, :some_of_args_invalid, {a, b}}
   end
 
   def set_size(%{parent: parent, set_size: set_size}, el) do

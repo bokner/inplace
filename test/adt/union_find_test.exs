@@ -47,6 +47,14 @@ defmodule InPlace.UnionFindTest do
 
   end
 
+  test "sanity" do
+    uf_size = 10
+    uf = UnionFind.new(uf_size)
+    refute UnionFind.find(uf, uf_size + 1) || UnionFind.find(uf, 0)
+
+    assert {:error, :some_of_args_invalid, _} = UnionFind.union(uf, 1, 11)
+  end
+
   defp count_sets(uf) do
     Enum.reduce(1..uf.size, MapSet.new(), fn el, acc ->
       MapSet.put(acc, UnionFind.find(uf, el))
