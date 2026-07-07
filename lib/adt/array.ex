@@ -58,8 +58,8 @@ defmodule InPlace.Array do
         :ok ->
           updated_value
 
-        altered ->
-          update_loop(array, idx, altered, update_fun)
+        was ->
+          update_loop(array, idx, was, update_fun)
       end
     end
   end

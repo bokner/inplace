@@ -14,12 +14,12 @@ defmodule InPlace.LinkedList do
       `:reclaim` (default) - element can not be restored, the pointer will be put back to the `allocation` pool;
       `:hide` - element can be restored by re-linking with it's former `left` and `right` neighbors;
        The element stays in the list, but can not be reached
-       except by directly addressed by it's pointer. The element can be put back to it's position
+       except by being directly addressed by its pointer. The element can be put back to it's position
        by reconnecting previously prior and next elements back to that element (see hide/2 and restore/2);
       `:rewind` - if specified, the special stack of removed element pointers is maintained.
         The effect of removal will be the same as for  :hide, except that
-        The elements can be restored in the reverse order of their removal by using `rewind/1`.
-    - `:mapper_fun`  # maps data entries to application data
+        the elements can be restored in the reverse order of their removal by using `rewind/1`.
+    - `:mapper_fun`  - maps data entries to application data
       optional, &Function.identity/1 by default
   """
   alias InPlace.{Array, Stack}
