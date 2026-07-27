@@ -47,6 +47,17 @@ defmodule InPlace.UnionFindTest do
 
   end
 
+  test "union with list" do
+    uf_size = 100
+    uf = UnionFind.new(uf_size)
+    random_elements = Enum.take_random(1..uf_size, div(uf_size, 2))
+    :ok = UnionFind.union(uf, random_elements)
+    ## All chosen elements are in the same set
+    [representative] = Enum.uniq_by(random_elements, fn el -> UnionFind.find(uf, el) end)
+    rest = Enum.to_list(1..uf_size) -- random_elements
+    refute Enum.any?(rest, fn el -> representative == UnionFind.find(uf, el) end)
+  end
+
   test "sanity" do
     uf_size = 10
     uf = UnionFind.new(uf_size)

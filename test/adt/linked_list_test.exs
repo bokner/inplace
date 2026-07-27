@@ -178,7 +178,7 @@ defmodule InPlace.LinkedListTest do
       Enum.shuffle(1..n)
       |> Enum.each(fn idx -> LinkedList.delete_pointer(dllc, idx) end)
 
-      ## Officially no elements in the list
+      ## No elements in the list
       assert Enum.empty?(LinkedList.to_list(dllc))
       assert LinkedList.size(dllc) == 0
       ## ..restore removed elements

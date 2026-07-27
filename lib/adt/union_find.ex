@@ -61,8 +61,17 @@ defmodule InPlace.UnionFind do
     {:error, :some_of_args_invalid, {a, b}}
   end
 
-  def set_size(%{parent: parent, set_size: set_size}, el) do
-    p = Array.get(parent, el)
+  def union(uf, elements) when is_list(elements) do
+    representative = hd(elements)
+    Enum.each(tl(elements), fn el -> union(uf, representative, el) end)
+  end
+
+  def union(uf, elements) do
+    union(uf, Enum.to_list(elements))
+  end
+
+  def set_size(%{parent: parent, set_size: set_size}, representative) do
+    p = Array.get(parent, representative)
     Array.get(set_size, p)
   end
 end
