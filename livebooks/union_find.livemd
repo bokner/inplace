@@ -1,0 +1,155 @@
+# Union-find
+
+```elixir
+Mix.install(
+  [
+    :kino,
+    {:kino_libgraph, "~> 0.1.0"}, 
+    {:libgraph, "~> 0.16.0"},
+    {:inplace, path: Path.join(System.get_env("HOME"), "projects/inplace")} 
+  ]
+)
+
+alias InPlace.UnionFind
+
+print_sets_fun = fn(uf, label) ->
+  reps = Enum.map(1..uf.size, fn el -> UnionFind.find(uf, el) end)
+  Enum.group_by(Enum.with_index(reps, 1), 
+    fn {x, _idx} -> x end, 
+    fn {_x, idx} -> idx end)
+  |> Map.values()
+  |> IO.inspect(charlists: :as_lists, label: label)
+end
+
+representative_fun = fn(uf, subset) ->
+  Enum.uniq_by(subset, fn el -> UnionFind.find(uf, el) end)
+  |> hd()
+end 
+```
+
+## What is union-find?
+
+Also known as [Disjoint Set Union (DSU)](https://en.wikipedia.org/wiki/Disjoint-set_data_structure
+).
+
+**Union-find** is a data structure that stores a collection of disjoint (non-overlapping) sets.
+
+It provides operations for adding new sets, merging sets (replacing them with their union), 
+and finding a representative member of a set.
+
+The last operation makes it possible to determine efficiently 
+whether any two elements belong to the same set or to different sets.
+
+## Functionality
+
+```elixir
+
+# Create union-find with capacity of 10 elements
+uf_size = 10
+uf = UnionFind.new(uf_size)
+print_sets_fun.(uf, :initial)
+## Union few elements
+## This will put them into a disjoint set.
+subset1 = Enum.take(1..uf_size, 3)
+IO.inspect(subset1, label: :subset1)
+
+:ok = UnionFind.union(uf, subset1)
+print_sets_fun.(uf, :first_union)
+
+## Unionized elements have the same representative
+## (that's how we know they belong to the same subset).
+subset1_rep = representative_fun.(uf, subset1)
+|> IO.inspect(label: :subset1_representative)
+
+rest = Enum.to_list(1..uf_size) |> Kernel.--(subset1)
+
+Enum.map(rest, fn el -> UnionFind.find(uf, el) end) 
+|> IO.inspect(charlists: :as_lists, label: :others)
+
+subset2 = Enum.take(rest, 3) |> IO.inspect(label: :subset2)
+## Let's unionize some more
+UnionFind.union(uf, subset2)
+
+subset2_rep = representative_fun.(uf, subset2)
+|> IO.inspect(label: :rep_subset2)
+
+### Union two sets
+UnionFind.union(uf, Enum.random(subset1), Enum.random(subset2))
+
+#UnionFind.find(uf, 5)
+#reps = Enum.map(1..10, fn el -> UnionFind.find(uf, el) end)
+print_sets_fun.(uf, :subset_subset2)
+
+:ok
+
+```
+
+## Application: Minimum Spanning Tree
+
+https://en.wikipedia.org/wiki/Minimum_spanning_tree
+
+```elixir
+File.read!("/Users/bokner/projects/inplace/livebooks/Minimum_spanning_tree.svg")
+|> Kino.Image.new(:svg)
+```
+
+## Kruskal's algorithm
+
+#### Pseudocode (https://en.wikipedia.org/wiki/Kruskal's_algorithm)
+
+```
+function Kruskal(Graph G) is
+    F:= ∅
+    for each v in G.Vertices do
+        MAKE-SET(v)
+
+    for each {u, v} in G.Edges ordered by increasing weight({u, v}) do
+        if FIND-SET(u) ≠ FIND-SET(v) then
+           ## vertices u and v are not in the same set, meaning
+           ## adding {u, v} edge to the tree will not result in a cycle
+
+            F := F ∪ { {u, v} }
+            ## Join the subtree with vertex u and the the subtree with vertex v 
+            UNION(FIND-SET(u), FIND-SET(v))
+    return F
+```
+
+## InPlace.Examples.Kruskal
+
+```elixir
+alias InPlace.Examples.MST
+
+edges = [
+  {:A, :B, 3},
+  {:A, :D, 6},
+  {:A, :G, 9},
+  {:B, :C, 2},
+  {:B, :D, 4},
+  {:B, :G, 9},
+  {:B, :F, 9},
+  {:C, :D, 2},
+  {:C, :E, 9},
+  {:C, :F, 8},
+  {:D, :E, 9},
+  {:E, :F, 7},
+  {:E, :H, 4},
+  {:E, :I, 5},
+  {:F, :G, 8},
+  {:F, :I, 9},
+  {:F, :J, 10},
+  {:G, :J, 11},
+  {:H, :I, 1},
+  {:H, :J, 4},
+  {:I, :J, 3}
+]
+
+{mst, weight} = MST.kruskal(edges)
+%{mst: Enum.sort(mst), weight: weight}
+```
+
+```elixir
+undirected_graph =
+  Enum.reduce(edges, Graph.new(type: :undirected), fn {v1, v2, weight}, acc ->
+    Graph.add_edge(acc, Graph.Edge.new(v1, v2, weight: weight, label: to_string(weight)))
+    end)
+```
