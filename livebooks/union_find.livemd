@@ -152,19 +152,12 @@ undirected_graph =
   Enum.reduce(edges, Graph.new(type: :undirected), fn {v1, v2, weight}, acc ->
     str_weight = to_string(weight)
     label = if {v1, v2} in result.mst_edges do
-      "\u2714" <> str_weight
+      "\u2705" <> str_weight
+      
     else
       str_weight
     end
     Graph.add_edge(acc, Graph.Edge.new(v1, v2, weight: weight, label:  
       label))
     end)
-```
-
-```elixir
-KinoLibgraph.Render.static(undirected_graph)
-```
-
-```elixir
-
 ```
