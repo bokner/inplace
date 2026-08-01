@@ -32,8 +32,9 @@ defmodule InPlace.Examples.MST do
           }
 
           UnionFind.union(uf, from_idx, to_idx)
+          ## All vertices in one set?
           if UnionFind.set_size(uf, 1) == num_vertices do
-            {:cont, acc}
+            {:halt, acc}
           else
             {:cont, acc}
           end

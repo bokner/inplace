@@ -143,13 +143,28 @@ edges = [
   {:I, :J, 3}
 ]
 
-{mst, weight} = MST.kruskal(edges)
-%{mst: Enum.sort(mst), weight: weight}
+{tree, weight} = MST.kruskal(edges)
+result = %{mst_edges: Enum.sort(tree), weight: weight}
 ```
 
 ```elixir
 undirected_graph =
   Enum.reduce(edges, Graph.new(type: :undirected), fn {v1, v2, weight}, acc ->
-    Graph.add_edge(acc, Graph.Edge.new(v1, v2, weight: weight, label: to_string(weight)))
+    str_weight = to_string(weight)
+    label = if {v1, v2} in result.mst_edges do
+      "\u2714" <> str_weight
+    else
+      str_weight
+    end
+    Graph.add_edge(acc, Graph.Edge.new(v1, v2, weight: weight, label:  
+      label))
     end)
+```
+
+```elixir
+KinoLibgraph.Render.static(undirected_graph)
+```
+
+```elixir
+
 ```
