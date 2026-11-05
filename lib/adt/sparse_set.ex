@@ -49,7 +49,7 @@ defmodule InPlace.SparseSet do
     end
   end
 
-  
+
   def undelete(set) do
     if undelete(set, 1) do
       Array.get(set.dom, size(set))
@@ -176,17 +176,23 @@ defmodule InPlace.SparseSet do
   This may or may not be more effective than the plain iteration.
 
   """
-  def iterate_ordered(set, mapper) when is_function(mapper, 1) do
-    iterate_ordered(set, [], fn pos, acc -> [mapper.(pos) | acc ] end) |> Enum.reverse()
+  def iterate_ordered(set, mapper, direction \\ :asc)
+  def iterate_ordered(set, mapper, direction) when direction in [:asc, :desc] and is_function(mapper, 1) do
+    iterate_ordered(set, [], fn pos, acc -> [mapper.(pos) | acc ] end, direction) |> Enum.reverse()
   end
 
-  def iterate_ordered(set, initial, reducer) when is_function(reducer, 2) do
+  def iterate_ordered(set, initial, reducer, direction) when direction in [:asc, :desc] and is_function(reducer, 2) do
     case size(set) do
       0 ->
         initial
 
       set_size ->
-        Enum.reduce_while(1..set.max_size, {set_size, initial}, fn pos,
+        range = if direction == :asc do
+          1..set.max_size
+        else
+          set.max_size..1//-1
+        end
+        Enum.reduce_while(range, {set_size, initial}, fn pos,
                                                                    {count_remainder, result_acc} =
                                                                      acc ->
           if member?(set, pos) do
