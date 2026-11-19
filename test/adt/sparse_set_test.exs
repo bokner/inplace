@@ -108,7 +108,7 @@ defmodule InPlace.SparseSetTest do
     assert set
            |> SparseSet.to_list()
            |> Enum.sort(:desc) ==
-             SparseSet.iterate_ordered(set, [], fn el, acc -> [el | acc] end)
+             SparseSet.iterate_ordered(set, [], fn el, acc -> [el | acc] end, :asc)
   end
 
   test "iterations with removal" do

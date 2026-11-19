@@ -181,7 +181,7 @@ defmodule InPlace.SparseSet do
     iterate_ordered(set, [], fn pos, acc -> [mapper.(pos) | acc ] end, direction) |> Enum.reverse()
   end
 
-  def iterate_ordered(set, initial, reducer, direction) when direction in [:asc, :desc] and is_function(reducer, 2) do
+  def iterate_ordered(%{idom: idom} = set, initial, reducer, direction) when direction in [:asc, :desc] and is_function(reducer, 2) do
     case size(set) do
       0 ->
         initial
@@ -195,7 +195,7 @@ defmodule InPlace.SparseSet do
         Enum.reduce_while(range, {set_size, initial}, fn pos,
                                                                    {count_remainder, result_acc} =
                                                                      acc ->
-          if member?(set, pos) do
+          if Array.get(idom, pos) <= set_size do
             case apply_reduction(pos, result_acc, reducer) do
               {:cont, result_acc} ->
                 ## Check if we've seen all set members

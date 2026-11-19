@@ -13,11 +13,22 @@ defmodule InPlace.BitUtils do
   ## Set/unset the bit at (0-based) position
   ##
   def set_bit(n, position) when is_64_bit(n) do
-    n ||| (1 <<< position)
+    n ||| 1 <<< position
   end
 
   def unset_bit(n, position) when is_64_bit(n) do
-    n &&& (Bitwise.bnot(1 <<< position))
+    n &&& Bitwise.bnot(1 <<< position)
+  end
+
+  @doc "Unset bits to the left of the position"
+  def unset_left(n, position) when is_64_bit(n) do
+    (n >>> position) <<< position
+  end
+
+  @doc "Unset bits to the right of the position"
+  def unset_right(n, position) when is_64_bit(n) do
+    mask = 1 <<< position
+    n &&& mask
   end
 
   ## Unfold into list
