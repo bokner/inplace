@@ -45,6 +45,16 @@ defmodule InPlace.SparseSetTest do
     assert SparseSet.get(set, random_el) == 2 * random_el
   end
 
+  test "member?" do
+    domain_size = 100
+    set = SparseSet.new(domain_size)
+    assert Enum.all?(1..domain_size, fn idx -> SparseSet.member?(set, idx) end)
+    random_out_of_range = domain_size + Enum.random(1..1000)
+    refute SparseSet.member?(set, domain_size + random_out_of_range)
+    refute SparseSet.member?(set, domain_size - random_out_of_range)
+
+  end
+
   test "copy" do
     domain_size = 100
     set = SparseSet.new(domain_size)

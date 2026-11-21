@@ -97,6 +97,10 @@ defmodule InPlace.SparseSet do
     |> Map.put(:idom, Array.from_list(serialized_set.idom_as_list))
   end
 
+  defp member_impl(%{max_size: max_size} = _set, el) when el < 1 or el > max_size do
+    nil
+  end
+
   defp member_impl(%{idom: idom} = set, el) do
     r = Array.get(idom, el)
 
